@@ -1,7 +1,7 @@
 # Engineer-AI Partnership — Project Guidelines
 
 **Status:** Living Document  
-**Last Updated:** 2026-02-25  
+**Last Updated:** 2026-02-28  
 **Audience:** Michael + Claude (working reference)
 
 ---
@@ -139,6 +139,13 @@ When delivering code changes:
 
 **Beta quality bar:** zero manual steps after `docker compose build`. If it requires running a SQL command or editing a config file by hand, it's not done.
 
+**Delivery command (always):**
+```bash
+tar -xzf <filename>.tar.gz --overwrite
+docker compose build --no-cache <service(s)>
+```
+No path argument on the tar — assume project root. List only the affected services on the build command.
+
 ---
 
 ## 9. What We've Learned (Running Log)
@@ -153,3 +160,20 @@ Validated in Swarm: writing the OpenAPI specs first forced clarity on what each 
 
 **2026-02-25 — Stub Contracts Are Real Contracts**  
 The email service being "stubbed" doesn't mean its interface is informal. The full request/response contract was designed and documented. When real SMTP goes in, no caller changes. That's the test of a good stub.
+**2026-02-28 — mTLS Across a Polyglot Stack: Implementation Patterns**  
+Mutual TLS across six languages (Go, Haskell, Python/Flask, Python/Gunicorn, Elixir, COBOL-via-Go) each has one idiomatic entry point. Go: `tls.Config` with `RequireAndVerifyClientCert` on server, `http.Transport` with `TLSClientConfig` on client. Haskell/warp-tls: `tlsSettings` with `tlsWantClientCert = True` and `ServerHooks`. Python/Gunicorn: `--certfile`, `--keyfile`, `--ca-certs`, `--cert-reqs 2` flags — zero code changes. Elixir/Plug.Cowboy: `scheme: :https` with `verify: :verify_peer, fail_if_no_peer_cert: true`. The key insight: mTLS is an infrastructure concern in most frameworks, not an application concern. You configure it at the server/transport level and the application code is untouched.
+
+**2026-02-28 — Init Container Pattern for Ephemeral PKI**  
+External cert generation (manual `gen-certs.sh`) is the right call for production PKI — CA key never lives in containers. For single-host PoC it's pure friction. Init container pattern: Alpine with openssl, generates CA + per-service certs into a named Docker volume on startup, `restart: "no"` so it exits cleanly, all downstream services `depends_on` with `condition: service_completed_successfully`. Result: zero manual steps, ephemeral 1-day CA, volume destroyed on `docker compose down`. Demo story: "In production this is cert-manager. Here it's the same security properties — ephemeral keys, verified mutual TLS — without the operational overhead."
+
+**2026-02-28 — Docker Volumes Survive `docker compose down`**  
+`docker compose down` removes containers, not volumes. If certs are stale or a volume needs to be regenerated, the command is `docker compose down && docker volume rm <project>_<volume-name>`. This caused repeated "bad certificate" failures when services were brought up across multiple compose cycles with a stale cert volume. The fix: always include the volume rm when cert rotation is the goal.
+
+**2026-02-28 — Every HTTP Client in a Service Needs the mTLS Transport**  
+When wiring mTLS into an existing service, `grep` for every `http.Client`, `http.Get`, `http.Post`, `http.DefaultClient` — not just the main proxy path. Health handlers, dev/reset endpoints, and direct API call helpers all create their own clients and will send plain HTTP to mTLS-only listeners. Go pattern: one shared `mtlsClient` or `mtlsTransport` var, initialized once in `main()` before anything else runs, referenced everywhere. Any client created with `&http.Client{}` after that point is a bug.
+
+**2026-02-28 — Healthchecks Can't Present Client Certs**  
+Docker healthchecks (`wget`, `curl`) have no mechanism to present a client certificate. Any internal service running mTLS must have its healthcheck removed — startup ordering is handled by `depends_on: cert-init: condition: service_completed_successfully`, not Docker health state. Gateway and externally-facing services (plain HTTP listener) keep their healthchecks. The error signature when a healthcheck hits an mTLS port: `tls: client didn't provide a certificate` (Go) or `{:unsupported_record_type, 71}` (Elixir — `0x47` = `G`, first byte of `GET`).
+
+**2026-02-28 — "Bad Certificate" vs "No Certificate" Are Different Failures**  
+`tls: client didn't provide a certificate` — client is speaking TLS but not sending a cert. Healthcheck or wrong client config. `tls: bad certificate` / `SSLV3_ALERT_BAD_CERTIFICATE` — client IS presenting a cert but the server can't verify it against its CA pool. Stale volume (certs from a previous CA), or a service calling upstream with plain `http.Client{}` instead of the mTLS transport. Mixed cert generations from partial restarts cause the second error; `docker volume rm` is the fix.

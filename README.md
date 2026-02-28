@@ -211,21 +211,23 @@ No architectural changes required for K8s. That was the point.
 
 | Service | Status | Notes |
 |---|---|---|
-| API Gateway | ✅ Functional | Routing, SSE proxy, scope enforcement, observability |
-| Auth Service | ✅ Functional | Full passkey/WebAuthn ceremony, JWT issuance, sessions, dev reset |
-| Auth UI Service | ✅ Functional | Server-driven forms, passkey ceremony proxy |
+| API Gateway | ✅ Functional | Routing, SSE proxy, scope enforcement, mTLS upstream |
+| Auth Service | ✅ Functional | Full passkey/WebAuthn ceremony, JWT issuance, sessions, mTLS |
+| Auth UI Service | ✅ Functional | Server-driven forms, passkey ceremony proxy, mTLS to auth-service |
 | Auth DB | ✅ Functional | players, passkey_credentials, webauthn_challenges |
-| Game State | ✅ Functional | SSE, demo loop, full service orchestration |
-| Deck Service | ✅ Functional | Real shuffle/deal, penetration threshold, reshuffle |
-| Hand Evaluator | ✅ Functional | Pure Haskell, soft/hard totals, bust detection |
-| Dealer AI | ✅ Functional | Rule-based strategy, ML upgrade path preserved |
-| Bank Service | ✅ Functional | COBOL financial arithmetic, PostgreSQL persistence, real-time balance via Redis |
-| Chat Service | ⚠️ Stub | Elixir/OTP skeleton, WebSocket pending |
-| Email Service | ✅ Functional | Real SMTP via Postfix/Gmail relay |
-| Observability | ✅ Functional | Live service call feed, Redis pub/sub, dashboard |
-| Redis | ✅ Functional | Sessions, exchange codes, verify tokens, obs pub/sub |
-| mTLS | ⚠️ Certs generated | Per-service enforcement is next phase |
-| OPA Integration | ⚠️ Pending | Token scope enforced at gateway; OPA policy engine next |
+| Game State | ✅ Functional | SSE, demo loop, full service orchestration, mTLS |
+| Deck Service | ✅ Functional | Real shuffle/deal, penetration threshold, reshuffle, mTLS |
+| Hand Evaluator | ✅ Functional | Pure Haskell, soft/hard totals, bust detection, mTLS |
+| Dealer AI | ✅ Functional | Rule-based strategy, ML upgrade path preserved, mTLS |
+| Bank Service | ✅ Functional | COBOL financial arithmetic, PostgreSQL persistence, Redis balance pub/sub, mTLS |
+| Chat Service | ⚠️ REST only | Elixir/OTP running with mTLS — WebSocket upgrade pending |
+| Email Service | ✅ Functional | Real SMTP via Postfix/Gmail relay, mTLS |
+| Observability | ✅ Functional | Live service call feed, Redis pub/sub, dashboard, mTLS |
+| Document Service | ✅ Functional | PDF generation via PDFKit, TypeScript |
+| Redis | ✅ Functional | Sessions, exchange codes, verify tokens, observability pub/sub, balance pub/sub |
+| mTLS | ✅ Complete | Ephemeral PKI via init container — all 12 internal services enforcing mutual TLS |
+| API Contracts | ✅ Complete | 12 OpenAPI 3.1 YAML files in contracts/openapi/ |
+| OPA Integration | ⚠️ Stub | Token scope enforced at gateway; OPA policy engine stubbed (always authorized) |
 | Multi-table | ⚠️ Pending | Architecture supports it, UI shows one table |
 | Network isolation | ⚠️ Pending | Single swarm-net now; per-domain networks next phase |
 
@@ -236,6 +238,8 @@ No architectural changes required for K8s. That was the point.
 This project was built through AI-augmented development — a human-AI partnership where architectural decisions, security design, and engineering judgment came from human expertise, and implementation was accelerated by an AI collaborator fluent across the full stack.
 
 The goal: demonstrate that experienced engineers working with AI can achieve significant productivity gains while maintaining — and in some cases exceeding — the quality standards of traditional development.
+
+**The numbers:** 12 containerized services across 6 languages, full mutual TLS across the stack, WebAuthn passkey authentication, COBOL financial arithmetic, real-time observability, real email delivery, 12 OpenAPI contracts — built in **under 40 hours of actual working time** across approximately one calendar week. A team would budget 3–4 months for a system of this complexity and architectural coherence.
 
 The leverage comes from the engineer providing what AI cannot: architectural vision, security threat modeling, domain judgment, and the experience to recognize when something is wrong before it becomes expensive to fix. The AI provides what the engineer shouldn't have to do manually: fluent implementation across 6 language ecosystems simultaneously, without the inconsistency that leads to vulnerabilities.
 

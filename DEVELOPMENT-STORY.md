@@ -95,6 +95,39 @@ Real credentials (SMTP app password) are stored in a `.env` file that is gitigno
 
 ---
 
+
+---
+
+## Mutual TLS Across the Polyglot Stack
+
+Once the application was functional, the architecture diagram said "mTLS (internal)" but the implementation said "plain HTTP." Closing that gap across 6 language runtimes is the kind of cross-cutting work that's disproportionately expensive for a human working alone.
+
+The approach: an init container (`cert-init`, Alpine + openssl) generates a CA and per-service certificates into a named Docker volume at startup. Every service waits for the init container to complete successfully before starting. The entire PKI is ephemeral — certificates have a 1-day TTL, the volume is destroyed when the stack comes down.
+
+**What "mTLS across 6 languages" actually means:**
+
+- **Go** (gateway, game-state, deck-service, bank-service, auth-ui-service): `tls.Config` with `RequireAndVerifyClientCert` on servers; `http.Transport` with `TLSClientConfig` on clients. One shared `mtlsTransport` initialized in `main()`.
+- **Haskell** (hand-evaluator): `warp-tls` with `tlsWantClientCert = True` and `ServerHooks` for peer verification.
+- **Python** (dealer-ai, email-service): Gunicorn flags `--certfile`, `--keyfile`, `--ca-certs`, `--cert-reqs 2`. Zero application code changes.
+- **Elixir** (chat-service): `Plug.Cowboy` with `scheme: :https`, `verify: :verify_peer`, `fail_if_no_peer_cert: true`.
+- **TypeScript** (auth-service): Node.js `https.createServer` with `requestCert: true`, `rejectUnauthorized: true`, CA pool from the shared volume.
+
+A lesson learned the hard way: every HTTP client in every service needs the mTLS transport. Health handlers, dev reset endpoints, API helpers — anything that creates a plain HTTP client will fail against an mTLS endpoint. The fix is one shared client initialized before anything else starts.
+
+Docker healthchecks cannot present client certificates, so internal mTLS services have their healthchecks removed. Startup ordering is handled by `depends_on: cert-init: condition: service_completed_successfully`.
+
+---
+
+## Contracts
+
+One early discipline failure was letting contract documentation slip behind implementation. The `contracts/openapi/` directory held 5 files in a mix of YAML and markdown formats, in a folder named `openapi`.
+
+The fix: 12 OpenAPI 3.1 YAML files — one per service, written from the actual implementation. The existing markdown files (email, observability, document) were kept as companion rationale documents; the YAML handles schema, the markdown handles why.
+
+Writing contracts from the live implementation revealed several places where things had quietly diverged from the original design. The bank service had gained endpoints (`/deposit`, `/withdraw`, `/export`) that were never formally documented. The auth service token model — bootstrap JWT vs. session JWT, exchange code pattern — existed in code but had never been written down in one place.
+
+Lesson now in the guidelines: contracts before implementation, or contracts immediately after. The gap between is where technical debt hides.
+
 ## What Went Wrong (and How It Was Fixed)
 
 **Honesty about failures is part of the case study.**
@@ -115,7 +148,7 @@ Real credentials (SMTP app password) are stored in a `.env` file that is gitigno
 
 This is the question every engineer and every employer will ask, so let's address it directly.
 
-A complete polyglot microservices architecture — 9 services, 6 languages, SSE, observability, zero trust security design, real email delivery, working game logic, containerized with proper base images — was built in sessions measured in hours, not weeks.
+A complete polyglot microservices architecture — 12 services, 6 languages, full mutual TLS across the stack, WebAuthn passkey authentication, COBOL financial arithmetic, SSE, real-time observability, real email delivery, working game logic, 12 OpenAPI contracts, containerized with proper base images — was built in **under 40 hours of actual working time**, spread across approximately one calendar week.
 
 The productivity gain is real. But the framing matters:
 
@@ -131,15 +164,14 @@ The correct framing: **AI amplifying expertise, not replacing engineers.** The l
 
 ## What's Next
 
-The project status is documented in `README.md`. The short version: core architecture is proven, several services still have stub implementations that need promotion to full functionality. The foundation is solid and the path forward is clear.
+The project status is documented in `README.md`. The short version: core architecture is fully implemented and running. The foundation is solid and the path forward is clear.
 
 For production deployment:
-- OPA policy rules (currently allow-all)
-- mTLS enforcement (certs generated, not yet enforced per-service)
-- Real passkey/WebAuthn ceremony (auth service currently uses simplified demo flow)
-- PostgreSQL schemas for game history
+- OPA policy rules (currently allow-all stub)
+- Real passkey hardware attestation enforcement (FIDO2 level 2)
 - Multi-table support (architecture supports it, UI shows one)
-- Chat UI integration (Elixir service running, not yet surfaced in UI)
+- Chat WebSocket upgrade (Elixir OTP actor model already correct, transport change only)
+- Network isolation per domain (single swarm-net now; per-domain networks next)
 
 ---
 
