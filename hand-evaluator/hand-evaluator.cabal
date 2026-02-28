@@ -14,6 +14,9 @@ executable hand-evaluator
     , aeson      >= 2.0
     , wai        >= 3.2
     , warp       >= 3.3
+    , warp-tls   >= 3.3
+    , data-default >= 0.7
+    , tls          >= 1.6
     , http-types >= 0.12
     , bytestring >= 0.11
     , text       >= 1.2

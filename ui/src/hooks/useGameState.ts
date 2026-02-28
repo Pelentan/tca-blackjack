@@ -30,25 +30,33 @@ export function useGameState(config: UseGameStateConfig = {}): UseGameStateRetur
   const [rounds, setRounds]       = useState<RoundSnapshot[]>([]);
   const lastPhaseRef              = useRef<string | null>(null);
 
-  // Reset state when table switches
+  // Single effect — reset and reconnect together when tableId changes
   useEffect(() => {
+    // Reset state immediately on table switch
     setGameState(null);
     setConnected(false);
+    setError(null);
+    setRounds([]);
     lastPhaseRef.current = null;
-  }, [tableId]);
 
-  useEffect(() => {
     const url = `${GATEWAY_URL}/api/game/${tableId}/stream`;
-    console.log(`[useGameState] Connecting to SSE: ${url}`);
+    console.log(`[useGameState] Connecting SSE: ${url}`);
+
     const es = new EventSource(url);
 
-    es.onopen = () => { setConnected(true); setError(null); };
+    es.onopen = () => {
+      console.log(`[useGameState] SSE open: ${tableId}`);
+      setConnected(true);
+      setError(null);
+    };
 
     es.addEventListener('game_state', (evt: MessageEvent) => {
       try {
         const event: SSEGameEvent = JSON.parse(evt.data);
         const gs = event.data;
         setGameState(gs);
+        setConnected(true);
+
         if (gs.phase === 'payout' && lastPhaseRef.current !== 'payout') {
           const snapshot: RoundSnapshot = {
             id:        `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -60,18 +68,25 @@ export function useGameState(config: UseGameStateConfig = {}): UseGameStateRetur
         }
         lastPhaseRef.current = gs.phase;
       } catch (e) {
-        console.error('[useGameState] Failed to parse game state:', e);
+        console.error('[useGameState] parse error:', e);
       }
     });
 
-    es.onerror = () => { setConnected(false); setError('Connection lost — reconnecting...'); };
+    es.onerror = (evt) => {
+      console.error('[useGameState] SSE error:', evt);
+      setConnected(false);
+      setError('Connection lost — reconnecting...');
+    };
 
-    return () => { es.close(); setConnected(false); };
+    return () => {
+      console.log(`[useGameState] Closing SSE: ${tableId}`);
+      es.close();
+    };
   }, [tableId]);
 
   const sendAction = useCallback(async (action: PlayerAction, amount?: number) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (token && token.length > 10) headers['Authorization'] = `Bearer ${token}`;
     try {
       const response = await fetch(`${GATEWAY_URL}/api/game/${tableId}/action`, {
         method: 'POST',
@@ -83,7 +98,7 @@ export function useGameState(config: UseGameStateConfig = {}): UseGameStateRetur
         throw new Error(err.message || `Action failed: ${response.status}`);
       }
     } catch (e) {
-      console.error('[useGameState] Action error:', e);
+      console.error('[useGameState] action error:', e);
       setError(e instanceof Error ? e.message : 'Action failed');
       setTimeout(() => setError(null), 3000);
     }

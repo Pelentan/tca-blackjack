@@ -1,0 +1,248 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Email Service
+  description: |
+    Tiered email delivery service with Auth/OPA policy enforcement.
+    Python/Flask stub — logs to console, sends nothing. Real SMTP
+    swaps in at the transport layer with zero upstream changes.
+
+    See companion document email-service-contract.md for full rationale on
+    the tier model, recipient types, encryption rules, and processing pipeline.
+
+    Five tiers enforced by Auth/OPA (stubbed — always authorized in PoC):
+    - system: unencrypted, raw email or user_id (verification, magic links)
+    - social: unencrypted, raw email or user_id (game invites, result notify)
+    - personal: encrypted by default, user_id only (session summaries)
+    - confidential: always encrypted, user_id only (account flags, moderation)
+    - restricted: always encrypted, registered account address only (bank receipts)
+
+    Internal service — mTLS only. Reachable from auth-service and game-state via auth-net.
+  version: 0.1.0
+
+servers:
+  - url: http://email-service:3008
+    description: Internal Docker network (mTLS enforced)
+
+paths:
+  /health:
+    get:
+      summary: Service health and transport configuration
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /send:
+    post:
+      summary: Send an email (all tiers use this single endpoint)
+      description: |
+        All tiers route through /send. The `tier` field determines processing path:
+        encryption, recipient resolution, and template selection all vary by tier.
+
+        Processing pipeline (each step is a rejection point):
+        1. Validate request schema
+        2. Auth/OPA check (caller permissions, recipient permissions, tier auth)
+        3. Validate tier/recipient type compatibility
+        4. Resolve recipient (user_id → email + public key if needed)
+        5. Validate payload against message_type registry
+        6. Render template
+        7. Apply encryption if required
+        8. Hand off to transport layer (SMTP — stubbed, logs to console)
+        9. Return queued response with message_id
+
+        See email-service-contract.md for full field semantics and error codes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendRequest'
+            examples:
+              system_verify:
+                summary: Email verification (system tier)
+                value:
+                  caller: { service: auth-service, request_id: "550e8400-e29b-41d4-a716-446655440000" }
+                  tier: system
+                  message_type: verify_email
+                  recipient: { type: email, value: newuser@example.com }
+                  payload: { verification_url: "https://...", expires_in: "24h" }
+                  options: {}
+              restricted_receipt:
+                summary: Transaction receipt (restricted tier)
+                value:
+                  caller: { service: bank-service, request_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8" }
+                  tier: restricted
+                  message_type: transaction_receipt
+                  recipient: { type: user_id, value: "player-uuid" }
+                  payload:
+                    transaction_id: "txn-uuid"
+                    amount: "50.00"
+                    type: withdrawal
+                    timestamp: "2026-02-28T21:00:00Z"
+                    balance_after: "950.00"
+                  options: {}
+      responses:
+        '202':
+          description: Message queued for delivery
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResponse'
+        '400':
+          description: Rejected — schema error, auth denied, invalid tier/recipient, unknown message type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendResponse'
+
+  /message-types:
+    get:
+      summary: List registered message types
+      description: Returns all known message types with their minimum tier and required payload fields.
+      responses:
+        '200':
+          description: Message type registry
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/MessageTypeSpec'
+
+components:
+  schemas:
+    SendRequest:
+      type: object
+      required: [caller, tier, message_type, recipient]
+      properties:
+        caller:
+          type: object
+          required: [service, request_id]
+          properties:
+            service:
+              type: string
+              description: Calling service name — must be in Auth/OPA allowlist
+            request_id:
+              type: string
+              format: uuid
+              description: Caller-generated UUID for correlation and audit
+        tier:
+          type: string
+          enum: [system, social, personal, confidential, restricted]
+        message_type:
+          type: string
+          description: Must match a registered message type in the registry
+          example: verify_email
+        recipient:
+          type: object
+          required: [type, value]
+          properties:
+            type:
+              type: string
+              enum: [email, user_id]
+              description: |
+                email: raw address string. Only valid for system and social tiers.
+                user_id: player UUID. Required for personal tier and above.
+                For restricted tier, the recipient field is ignored entirely —
+                the email service resolves the address from the bank account record.
+            value:
+              type: string
+        payload:
+          type: object
+          additionalProperties: true
+          description: Template variables. Required fields vary by message_type — see /message-types.
+        options:
+          type: object
+          properties:
+            encryption_waived:
+              type: boolean
+              default: false
+              description: Personal tier only. Owner must provide a valid waiver_token.
+            waiver_token:
+              type: string
+              description: Required if encryption_waived is true. Short-lived re-verification token.
+
+    SendResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [queued, rejected, error]
+        message_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present when status is queued.
+        enforced_tier:
+          type: string
+          nullable: true
+          description: Tier that Auth/OPA approved. May differ from requested tier.
+        encrypted:
+          type: boolean
+          nullable: true
+        error:
+          nullable: true
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - auth_denied
+                - invalid_recipient
+                - recipient_not_found
+                - unknown_message_type
+                - encryption_key_missing
+                - waiver_token_invalid
+                - restricted_address_mismatch
+                - smtp_unavailable
+                - payload_validation_failed
+            message:
+              type: string
+
+    MessageTypeSpec:
+      type: object
+      properties:
+        minimum_tier:
+          type: string
+          enum: [system, social, personal, confidential, restricted]
+        required_fields:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: email-service
+        language:
+          type: string
+          example: Python
+        tiers:
+          type: array
+          items:
+            type: string
+        transport:
+          type: object
+          properties:
+            host:
+              type: string
+            port:
+              type: integer
+            mode:
+              type: string
+        encryption:
+          type: string
+          example: stubbed — logs intent, sends plaintext
+        auth:
+          type: string
+          example: stubbed — always authorized (policy enforced structurally)

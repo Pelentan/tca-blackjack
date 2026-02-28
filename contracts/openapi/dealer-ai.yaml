@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Dealer AI
+  description: |
+    Rule-based dealer strategy engine. Implements standard casino dealer rules:
+    stand on hard 17+, hit on soft 17 (house rule), hit on 16 and below.
+
+    Written in Python deliberately — not for performance, but for upgrade path.
+    The decision logic lives in a single function (`dealer_decision`). Swapping
+    in an ML model requires replacing that function and nothing else. The HTTP
+    contract, the caller, and the Docker configuration are all unchanged.
+
+    Internal service — mTLS only, not externally exposed.
+  version: 0.1.0
+
+servers:
+  - url: http://dealer-ai:3004
+    description: Internal Docker network (mTLS enforced)
+
+paths:
+  /health:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /decide:
+    post:
+      summary: Get dealer action for current hand
+      description: |
+        Applies standard casino dealer rules to determine the next action.
+        The service evaluates the hand internally — callers do not need to
+        pre-compute hand values.
+
+        Dealer rules applied (in order):
+        1. If bust: return bust (no decision needed)
+        2. If total < 17: hit
+        3. If total == 17 and soft: hit (house rule — configurable in production)
+        4. If total >= 17 (hard): stand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideRequest'
+            examples:
+              hit_below_17:
+                summary: Dealer hits on 15
+                value:
+                  hand:
+                    - { suit: hearts, rank: '8' }
+                    - { suit: clubs, rank: '7' }
+              soft_17_hit:
+                summary: Dealer hits soft 17
+                value:
+                  hand:
+                    - { suit: spades, rank: A }
+                    - { suit: hearts, rank: '6' }
+              stand_hard_18:
+                summary: Dealer stands on hard 18
+                value:
+                  hand:
+                    - { suit: diamonds, rank: '10' }
+                    - { suit: clubs, rank: '8' }
+      responses:
+        '200':
+          description: Decision returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecideResponse'
+              examples:
+                hit:
+                  value: { action: hit, handValue: 15, isSoft: false, reasoning: "Dealer hits on 15 (below 17)" }
+                stand:
+                  value: { action: stand, handValue: 18, isSoft: false, reasoning: "Dealer stands on 18" }
+                bust:
+                  value: { action: bust, handValue: 23, isSoft: false, reasoning: "Dealer busts with 23" }
+        '400':
+          description: Missing or invalid hand
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Card:
+      type: object
+      required: [suit, rank]
+      properties:
+        suit:
+          type: string
+          enum: [hearts, diamonds, clubs, spades]
+        rank:
+          type: string
+          enum: [A, '2', '3', '4', '5', '6', '7', '8', '9', '10', J, Q, K]
+
+    DecideRequest:
+      type: object
+      required: [hand]
+      properties:
+        hand:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+          minItems: 2
+          description: Dealer's current visible hand (hole card already revealed).
+
+    DecideResponse:
+      type: object
+      required: [action, handValue, isSoft, reasoning]
+      properties:
+        action:
+          type: string
+          enum: [hit, stand, bust]
+          description: The action the dealer will take.
+        handValue:
+          type: integer
+          description: Computed hand value used to make the decision.
+        isSoft:
+          type: boolean
+          description: Whether the hand is soft (ace counting as 11).
+        reasoning:
+          type: string
+          description: |
+            Human-readable explanation of the decision. Useful for observability
+            and debugging. Not intended for UI display.
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: dealer-ai
+        language:
+          type: string
+          example: Python
+        note:
+          type: string
+          description: Upgrade path note — present in health response for demo purposes.
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

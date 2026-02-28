@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -77,7 +79,7 @@ func NewTable(tableID string) *Table {
 
 	// Seed starting balance — idempotent, bank ignores if player already exists
 	startingChips := 1000
-	http.Post(bankServiceURL+"/account",
+	mtlsClient.Post(bankServiceURL+"/account",
 		"application/json",
 		bytes.NewReader([]byte(fmt.Sprintf(
 			`{"playerId":"%s","startingBalance":"%d.00"}`, playerID, startingChips,
@@ -249,7 +251,7 @@ func (r *Registry) CreatePlayerTable(playerID, playerName string) *Table {
 	}
 
 	// New table — do bank calls before taking the registry lock
-	http.Post(bankServiceURL+"/account",
+	mtlsClient.Post(bankServiceURL+"/account",
 		"application/json",
 		bytes.NewReader([]byte(fmt.Sprintf(
 			`{"playerId":"%s","startingBalance":"1000.00"}`, playerID,
@@ -313,6 +315,15 @@ func phaseBetting(t *Table) {
 		s.Players[i].CurrentBet = betAmount
 		s.Players[i].Status = "betting"
 
+		// Auto-replenish broke demo player before attempting bet
+		if s.Players[i].Chips < betAmount {
+			log.Printf("[demo] player %s is broke — auto-replenishing 1000 chips", s.Players[i].ID)
+			if newBal := callBankDeposit(s.Players[i].ID, 1000); newBal >= 0 {
+				s.Players[i].Chips = newBal
+				log.Printf("[demo] replenished: player=%s newBalance=%d", s.Players[i].ID, newBal)
+			}
+		}
+
 		txID, newBalance := callBankBet(s.Players[i].ID, betAmount)
 		if txID != "" {
 			s.Players[i].BankTxID = txID
@@ -320,8 +331,7 @@ func phaseBetting(t *Table) {
 			log.Printf("[bank] bet placed: player=%s amount=%d txId=%s balance=%d",
 				s.Players[i].ID, betAmount, txID, newBalance)
 		} else {
-			log.Printf("[bank] bet failed for player=%s — using local fallback", s.Players[i].ID)
-			s.Players[i].Chips -= betAmount
+			log.Printf("[bank] bet failed for player=%s — skipping hand", s.Players[i].ID)
 		}
 	}
 
@@ -727,6 +737,16 @@ func playerHit(table *Table) {
 		runDealerTurnPlayer(table)
 		return
 	}
+	// Five-card Charlie: 5 cards without busting = automatic win
+	if len(s.Players[0].Hand) >= 5 {
+		log.Printf("[game] five-card charlie: player wins with %d cards, value=%d", len(s.Players[0].Hand), hr.Value)
+		s.Players[0].Status = "standing"
+		s.ActivePlayerID = nil
+		table.SetState(s)
+		time.Sleep(600 * time.Millisecond)
+		runDealerTurnPlayer(table)
+		return
+	}
 	table.SetState(s)
 }
 
@@ -853,8 +873,9 @@ func runPayoutPlayer(table *Table) {
 	dealerVal := s.Dealer.HandValue
 	playerStatus := s.Players[0].Status
 
-	playerBlackjack := playerVal == 21 && len(s.Players[0].Hand) == 2 && playerStatus == "blackjack"
-	dealerBlackjack := dealerVal == 21 && len(s.Dealer.Hand) == 2
+	playerBlackjack  := playerVal == 21 && len(s.Players[0].Hand) == 2 && playerStatus == "blackjack"
+	dealerBlackjack  := dealerVal == 21 && len(s.Dealer.Hand) == 2
+	fiveCardCharlie  := len(s.Players[0].Hand) >= 5 && playerStatus != "bust"
 
 	var outcome string
 	switch {
@@ -867,6 +888,10 @@ func runPayoutPlayer(table *Table) {
 	case playerBlackjack:
 		s.Players[0].Status = "blackjack"
 		outcome = "blackjack"
+	case fiveCardCharlie:
+		// Five-card Charlie beats dealer regardless of dealer total
+		s.Players[0].Status = "won"
+		outcome = "win"
 	case dealerVal > 21 || playerVal > dealerVal:
 		s.Players[0].Status = "won"
 		outcome = "win"
@@ -930,12 +955,55 @@ func initShoe(tableID string) {
 // ── Upstream Service Calls ─────────────────────────────────────────────────────
 
 var (
-	deckServiceURL     = getEnv("DECK_SERVICE_URL", "http://deck-service:3002")
-	handEvaluatorURL   = getEnv("HAND_EVALUATOR_URL", "http://hand-evaluator:3003")
-	dealerAIURL        = getEnv("DEALER_AI_URL", "http://dealer-ai:3004")
+	deckServiceURL     = getEnv("DECK_SERVICE_URL", "https://deck-service:3002")
+	handEvaluatorURL   = getEnv("HAND_EVALUATOR_URL", "https://hand-evaluator:3003")
+	dealerAIURL        = getEnv("DEALER_AI_URL", "https://dealer-ai:3004")
 	observabilityURL   = getEnv("OBSERVABILITY_URL", "http://observability-service:3009")
-	bankServiceURL     = getEnv("BANK_SERVICE_URL", "http://bank-service:3005")
+	bankServiceURL     = getEnv("BANK_SERVICE_URL", "https://bank-service:3005")
 )
+
+// mtlsClient is used for calls to mTLS-enabled services (game domain).
+// Loaded at startup with the service cert and CA. Falls back to default
+// http.DefaultClient if TLS env vars are not present.
+var mtlsClient *http.Client
+
+func initMTLSClient() {
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
+
+	if certFile == "" || keyFile == "" || caFile == "" {
+		log.Println("[tls] no cert env vars — using plain HTTP client for game domain calls")
+		mtlsClient = &http.Client{Timeout: 5 * time.Second}
+		return
+	}
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatalf("[tls] failed to load client cert: %v", err)
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[tls] failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[tls] failed to parse CA cert")
+	}
+
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caPool,
+		MinVersion:   tls.VersionTLS12,
+	}
+
+	mtlsClient = &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+	}
+	log.Println("[tls] mTLS client ready — game domain calls use mutual TLS")
+}
 
 // reportEvent fires a non-blocking event report to the observability service.
 // Fire and forget — never blocks game logic.
@@ -967,7 +1035,7 @@ func callDeckService(tableID string, count int) []Card {
 	body, _ := json.Marshal(map[string]int{"count": count})
 	start := time.Now()
 	path := fmt.Sprintf("/shoe/%s/deal", tableID)
-	resp, err := http.Post(
+	resp, err := mtlsClient.Post(
 		fmt.Sprintf("%s%s", deckServiceURL, path),
 		"application/json",
 		bytes.NewReader(body),
@@ -994,7 +1062,7 @@ type HandResult struct {
 func callHandEvaluator(hand []Card) HandResult {
 	body, _ := json.Marshal(map[string]interface{}{"cards": hand})
 	start := time.Now()
-	resp, err := http.Post(
+	resp, err := mtlsClient.Post(
 		fmt.Sprintf("%s/evaluate", handEvaluatorURL),
 		"application/json",
 		bytes.NewReader(body),
@@ -1014,7 +1082,7 @@ func callHandEvaluator(hand []Card) HandResult {
 func callDealerAI(hand []Card) string {
 	body, _ := json.Marshal(map[string]interface{}{"hand": hand})
 	start := time.Now()
-	resp, err := http.Post(
+	resp, err := mtlsClient.Post(
 		fmt.Sprintf("%s/decide", dealerAIURL),
 		"application/json",
 		bytes.NewReader(body),
@@ -1050,7 +1118,7 @@ func callBankBet(playerID string, amount int) (string, int) {
 		"playerId": playerID,
 		"amount":   fmt.Sprintf("%d.00", amount),
 	})
-	resp, err := http.Post(bankServiceURL+"/bet", "application/json", bytes.NewReader(body))
+	resp, err := mtlsClient.Post(bankServiceURL+"/bet", "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("[bank-service] bet error: %v", err)
 		reportEvent("bank-service", "POST", "/bet", 503, time.Since(start).Milliseconds())
@@ -1080,7 +1148,7 @@ func callBankPayout(txID string, result string) int {
 		"transactionId": txID,
 		"result":        result,
 	})
-	resp, err := http.Post(bankServiceURL+"/payout", "application/json", bytes.NewReader(body))
+	resp, err := mtlsClient.Post(bankServiceURL+"/payout", "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("[bank-service] payout error: %v", err)
 		reportEvent("bank-service", "POST", "/payout", 503, time.Since(start).Milliseconds())
@@ -1098,6 +1166,29 @@ func callBankPayout(txID string, result string) int {
 	json.NewDecoder(resp.Body).Decode(&pr)
 	var bal float64
 	fmt.Sscanf(pr.NewBalance, "%f", &bal)
+	return int(bal)
+}
+
+// callBankDeposit tops up a player's account. Used by demo loop when balance hits zero.
+func callBankDeposit(playerID string, amount int) int {
+	start := time.Now()
+	body, _ := json.Marshal(map[string]string{
+		"playerId": playerID,
+		"amount":   fmt.Sprintf("%d.00", amount),
+		"note":     "demo auto-replenish",
+	})
+	resp, err := mtlsClient.Post(bankServiceURL+"/deposit", "application/json", bytes.NewReader(body))
+	if err != nil {
+		reportEvent("bank-service", "POST", "/deposit", 503, time.Since(start).Milliseconds())
+		log.Printf("[bank] deposit error: %v", err)
+		return -1
+	}
+	defer resp.Body.Close()
+	reportEvent("bank-service", "POST", "/deposit", resp.StatusCode, time.Since(start).Milliseconds())
+	var result map[string]string
+	json.NewDecoder(resp.Body).Decode(&result)
+	var bal float64
+	fmt.Sscanf(result["newBalance"], "%f", &bal)
 	return int(bal)
 }
 
@@ -1123,6 +1214,9 @@ func callBankBalance(playerID string) int {
 // ── HTTP Handlers ─────────────────────────────────────────────────────────────
 
 func main() {
+	// Init mTLS client before anything that makes outbound calls
+	initMTLSClient()
+
 	registry := NewRegistry()
 
 	// Create and start demo table
@@ -1241,11 +1335,44 @@ func main() {
 		})
 	})
 
-	port := getEnv("PORT", "3001")
-	log.Printf("🃏 Game State service starting on :%s", port)
-	log.Printf("   Demo table: %s", demoTableID)
+	port     := getEnv("PORT", "3001")
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
 
-	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
+	if certFile == "" || keyFile == "" || caFile == "" {
+		log.Printf("🃏 Game State service starting on :%s (plaintext — no TLS env vars)", port)
+		log.Printf("   Demo table: %s", demoTableID)
+		if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[tls] failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[tls] failed to parse CA cert")
+	}
+
+	tlsCfg := &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  caPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
+	srv := &http.Server{
+		Addr:      ":" + port,
+		Handler:   corsMiddleware(mux),
+		TLSConfig: tlsCfg,
+	}
+
+	log.Printf("🃏 Game State service starting on :%s (mTLS)", port)
+	log.Printf("   Demo table: %s", demoTableID)
+	if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil {
 		log.Fatal(err)
 	}
 }

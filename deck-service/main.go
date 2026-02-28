@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"log"
 	"math/rand"
@@ -101,9 +103,43 @@ func main() {
 		http.NotFound(w, r)
 	})
 
-	port := getEnv("PORT", "3002")
-	log.Printf("🃏 Deck Service (Go) starting on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	port    := getEnv("PORT", "3002")
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
+
+	if certFile == "" || keyFile == "" || caFile == "" {
+		log.Printf("🃏 Deck Service (Go) starting on :%s (plaintext — no TLS env vars)", port)
+		if err := http.ListenAndServe(":"+port, mux); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	// Load CA cert pool for client verification
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[tls] failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[tls] failed to parse CA cert")
+	}
+
+	tlsCfg := &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  caPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
+	srv := &http.Server{
+		Addr:      ":" + port,
+		Handler:   mux,
+		TLSConfig: tlsCfg,
+	}
+
+	log.Printf("🃏 Deck Service (Go) starting on :%s (mTLS)", port)
+	if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -15,7 +15,9 @@
  *   - Redis: sessions, verify tokens, exchange codes
  */
 
-import http from 'http';
+import http  from 'http';
+import https from 'https';
+import fs    from 'fs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import Redis from 'ioredis';
@@ -35,11 +37,48 @@ const PORT    = parseInt(process.env.PORT ?? '3006');
 const SERVICE = 'auth-service';
 
 const JWT_SECRET     = process.env.JWT_SECRET ?? 'swarm-blackjack-dev-secret-change-in-production';
-const JWT_EXPIRES_IN = 900; // 15 minutes
+const JWT_EXPIRES_IN = 3600; // 60 minutes — extended for demo sessions
 
 const REDIS_URL   = process.env.REDIS_URL   ?? 'redis://redis:6379';
 const EMAIL_URL   = process.env.EMAIL_URL   ?? 'http://email-service:3008';
-const BANK_URL    = process.env.BANK_URL    ?? 'http://bank-service:3005';
+const BANK_URL    = process.env.BANK_URL    ?? 'https://bank-service:3005';
+
+const TLS_CERT = process.env.TLS_CERT ?? '';
+const TLS_KEY  = process.env.TLS_KEY  ?? '';
+const TLS_CA   = process.env.TLS_CA   ?? '';
+
+// mTLS agent for outbound calls to mTLS-enabled services (bank-service).
+const mtlsAgent = (TLS_CERT && TLS_KEY && TLS_CA)
+  ? new https.Agent({
+      cert: fs.readFileSync(TLS_CERT),
+      key:  fs.readFileSync(TLS_KEY),
+      ca:   fs.readFileSync(TLS_CA),
+    })
+  : new https.Agent({ rejectUnauthorized: false });
+
+// Post JSON to an mTLS endpoint. Returns parsed response body or null on error.
+function mtlsPost(url: string, body: object): Promise<any> {
+  return new Promise((resolve) => {
+    const data    = JSON.stringify(body);
+    const parsed  = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      port:     parsed.port || 443,
+      path:     parsed.pathname,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+      agent:    mtlsAgent,
+    };
+    const req = https.request(options, (res) => {
+      let buf = '';
+      res.on('data', (chunk) => buf += chunk);
+      res.on('end', () => { try { resolve(JSON.parse(buf)); } catch { resolve(null); } });
+    });
+    req.on('error', (e) => { console.error(`[mtlsPost] ${url} error: ${e.message}`); resolve(null); });
+    req.write(data);
+    req.end();
+  });
+}
 const GATEWAY_URL = process.env.GATEWAY_URL ?? 'http://localhost:8021';
 const UI_URL      = process.env.UI_URL      ?? 'http://localhost:8021';
 
@@ -303,10 +342,7 @@ async function sendTransactionReceipt(player: Player, txData: {
 
 async function ensureBankAccount(player: Player): Promise<void> {
   try {
-    await fetch(`${BANK_URL}/account`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerId: player.id, startingBalance: '1000.00' }),
-    });
+    await mtlsPost(`${BANK_URL}/account`, { playerId: player.id, startingBalance: '1000.00' });
     console.log(`[${SERVICE}] Bank account ensured for player=${player.id}`);
   } catch (e: any) {
     console.error(`[${SERVICE}] Failed to create bank account:`, e.message);
@@ -350,7 +386,7 @@ function decodeClientDataChallenge(clientDataJSON: string): string {
 
 // ── Server ────────────────────────────────────────────────────────────────────
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
   const url    = new URL(req.url ?? '/', `http://localhost:${PORT}`);
   const method = req.method ?? 'GET';
 
@@ -767,7 +803,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   jsonResponse(res, 404, { error: 'not found' });
-});
+};
+
+// Create server — mTLS if cert env vars present, plain HTTP otherwise
+const server = (TLS_CERT && TLS_KEY && TLS_CA)
+  ? https.createServer({
+      cert: fs.readFileSync(TLS_CERT),
+      key:  fs.readFileSync(TLS_KEY),
+      ca:   fs.readFileSync(TLS_CA),
+      requestCert: true,
+      rejectUnauthorized: true,
+    }, requestHandler)
+  : http.createServer(requestHandler);
 
 // ── Error page ────────────────────────────────────────────────────────────────
 
@@ -808,7 +855,8 @@ async function main() {
   console.log(`[${SERVICE}] Migrations complete`);
 
   server.listen(PORT, () => {
-    console.log(`[${SERVICE}] listening on :${PORT}`);
+    const mode = (TLS_CERT && TLS_KEY && TLS_CA) ? '(mTLS)' : '(plaintext)';
+    console.log(`[${SERVICE}] listening on :${PORT} ${mode}`);
     console.log(`[${SERVICE}] WebAuthn: rpId=${RP_ID} origin=${ORIGIN}`);
     console.log(`[${SERVICE}] Gateway: ${GATEWAY_URL} | UI: ${UI_URL}`);
   });

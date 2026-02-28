@@ -1,0 +1,327 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Auth UI Service
+  description: |
+    Browser-facing authentication orchestrator. Owns the auth modal flow.
+    Written in Go, deployed as a scratch container (static binary, no shell).
+
+    The browser never calls auth-service directly. This service sits between
+    the UI and auth-service, providing:
+    - Server-driven field definitions (form schema returned from API)
+    - Client-side validation before forwarding to auth-service
+    - Transparent passkey ceremony proxying with Authorization header forwarding
+
+    All calls to auth-service use mTLS. Browsers connect over plain HTTPS
+    via the gateway — the mTLS boundary is auth-ui-service → auth-service.
+
+    Reachable from gateway via auth-net only.
+  version: 0.1.0
+
+servers:
+  - url: http://auth-ui-service:3010
+    description: Internal Docker network (plain HTTP — external TLS terminated at gateway)
+
+tags:
+  - name: form
+    description: Form field definitions and submission
+  - name: passkey
+    description: Passkey ceremony proxy
+
+paths:
+  /health:
+    get:
+      summary: Service health (includes auth-service reachability check)
+      tags: [form]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /fields:
+    get:
+      summary: Get form field definitions for an action
+      description: |
+        Returns the field schema for the requested action. The UI renders
+        the modal dynamically from this response — no hardcoded form HTML.
+        This pattern allows field changes (labels, validation rules, ordering)
+        without UI deployments.
+      tags: [form]
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [register, login]
+          description: Which form to render
+      responses:
+        '200':
+          description: Field definitions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldsResponse'
+        '400':
+          description: Unknown action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /submit:
+    post:
+      summary: Validate and forward form submission to auth-service
+      description: |
+        Validates the submitted fields client-side, then forwards to auth-service.
+        Currently only handles register action — login is passkey-only and uses
+        /passkey/login/begin directly. Sending action=login returns 400.
+      tags: [form]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitRequest'
+            examples:
+              register:
+                summary: New account registration
+                value:
+                  action: register
+                  fields:
+                    email: player@example.com
+                    name: PlayerOne
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitResponse'
+        '400':
+          description: Invalid action or JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already registered (from auth-service)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Client-side validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+
+  /passkey/register/begin:
+    post:
+      summary: Proxy passkey registration begin to auth-service
+      description: |
+        Transparent proxy. Forwards request body and Authorization header to
+        auth-service /passkey/register/begin. Returns WebAuthn creation options.
+        Requires a valid bootstrap JWT (scope: enroll) in Authorization header.
+      tags: [passkey]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: WebAuthn creation options (proxied from auth-service)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /passkey/register/complete:
+    post:
+      summary: Proxy passkey registration complete to auth-service
+      description: |
+        Transparent proxy. Forwards WebAuthn attestation response and Authorization
+        header to auth-service /passkey/register/complete.
+        Returns session JWT on success.
+      tags: [passkey]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: WebAuthn RegistrationResponseJSON from browser
+      responses:
+        '200':
+          description: Session JWT issued (proxied from auth-service)
+        '400':
+          description: Attestation failed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /passkey/login/begin:
+    post:
+      summary: Proxy passkey login begin to auth-service
+      description: |
+        Transparent proxy. No JWT required — this initiates the unauthenticated
+        assertion ceremony. Returns WebAuthn request options.
+      tags: [passkey]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Optional — omit for usernameless flow
+      responses:
+        '200':
+          description: WebAuthn request options (proxied from auth-service)
+
+  /passkey/login/complete:
+    post:
+      summary: Proxy passkey login complete to auth-service
+      description: |
+        Transparent proxy. Forwards WebAuthn assertion response to auth-service.
+        Returns session JWT on success.
+      tags: [passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: WebAuthn AuthenticationResponseJSON from browser
+      responses:
+        '200':
+          description: Session JWT issued (proxied from auth-service)
+        '400':
+          description: Assertion failed
+        '401':
+          description: Challenge expired or invalid
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bootstrap JWT (scope=enroll) or session JWT (scope=session) — forwarded to auth-service
+
+  schemas:
+    FieldDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Field identifier used as key in submit request
+        label:
+          type: string
+          description: Display label
+        type:
+          type: string
+          enum: [text, email, password]
+        required:
+          type: boolean
+        placeholder:
+          type: string
+
+    FieldsResponse:
+      type: object
+      properties:
+        action:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldDefinition'
+
+    SubmitRequest:
+      type: object
+      required: [action, fields]
+      properties:
+        action:
+          type: string
+          enum: [register]
+          description: Only register is supported via /submit. Login uses passkey ceremony.
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value pairs matching field names from /fields response
+
+    SubmitResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+        playerId:
+          type: string
+          format: uuid
+        playerName:
+          type: string
+        email:
+          type: string
+          format: email
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: validation failed
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: auth-ui-service
+        language:
+          type: string
+          example: Go
+        container:
+          type: string
+          example: scratch
+        auth_service:
+          type: string
+          enum: [reachable, unreachable]
+        actions:
+          type: array
+          items:
+            type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"log"
 	"net/http"
 	"os"
@@ -68,8 +70,41 @@ func main() {
 	mux.HandleFunc("/export",        exportHandler(db))
 	mux.HandleFunc("/dev/reset",     devResetHandler(db))
 
-	log.Printf("[bank] listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
+
+	if certFile == "" || keyFile == "" || caFile == "" {
+		log.Printf("[bank] listening on :%s (plaintext — no TLS env vars)", port)
+		if err := http.ListenAndServe(":"+port, mux); err != nil {
+			log.Fatalf("[bank] server: %v", err)
+		}
+		return
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[bank][tls] failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[bank][tls] failed to parse CA cert")
+	}
+
+	tlsCfg := &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:  caPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
+	srv := &http.Server{
+		Addr:      ":" + port,
+		Handler:   mux,
+		TLSConfig: tlsCfg,
+	}
+
+	log.Printf("[bank] listening on :%s (mTLS)", port)
+	if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil {
 		log.Fatalf("[bank] server: %v", err)
 	}
 }

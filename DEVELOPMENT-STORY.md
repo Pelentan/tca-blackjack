@@ -41,7 +41,7 @@ This is a choice most teams avoid because maintaining expertise across six langu
 | Gateway, Game State, Deck Service | Go | Built for high-throughput HTTP and concurrency |
 | Hand Evaluator | Haskell | Pure function, provably correct — the compiler enforces no side effects |
 | Dealer AI | Python | Rule-based today, clean ML upgrade path tomorrow |
-| Bank Service | Java | `BigDecimal` arithmetic — float near money is a compile error |
+| Bank Service | COBOL + Go | Integer cent arithmetic in COBOL — no floats near money. Go provides REST API and PostgreSQL layer. |
 | Auth Service | TypeScript | Deepest WebAuthn/passkey ecosystem |
 | Chat Service | Elixir | OTP supervision trees — this is literally what it was designed for |
 | Email Service | Python | Simplest implementation; swap transport, zero upstream changes |

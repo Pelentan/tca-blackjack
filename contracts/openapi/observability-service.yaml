@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Observability Service
+  description: |
+    Receives inter-service call reports, filters sensitive data, and publishes
+    to Redis pub/sub. The gateway subscribes to Redis and fans events out to
+    SSE clients (the observability dashboard).
+
+    See companion document observability-service-contract.md for full rationale
+    on the filtering rules, allowlist design, and gateway integration.
+
+    Design principles:
+    - Fire and forget: callers do not wait beyond 202. Observability is never
+      on the critical path. If this service is down, callers log and move on.
+    - Filter at ingress: sensitive data (IPs, UUIDs, JWTs, query values) is
+      stripped here before anything hits Redis or the browser.
+    - Owns Redis: no other service publishes to the observability channel.
+      Redis is an implementation detail of this service.
+    - Scratch container: static Go binary, no shell, no attack surface.
+
+    Event flow:
+      [any service] → POST /event → [observability-service] → Redis swarm:events → [gateway] → SSE → [browser]
+
+    Internal service — mTLS only. Reachable by all services on swarm-net.
+  version: 0.1.0
+
+servers:
+  - url: http://observability-service:3009
+    description: Internal Docker network (mTLS enforced)
+
+paths:
+  /health:
+    get:
+      summary: Service health with event counters
+      description: Counters are in-memory and reset on restart.
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /event:
+    post:
+      summary: Report a service-to-service call
+      description: |
+        Fire and forget. Always returns 202. Callers should not inspect the response
+        or retry on error.
+
+        Filtering applied at ingress before publishing to Redis:
+        - Path sanitization: UUIDs → [id], JWTs → [token], IPs → [ip], query values → keys only
+        - Caller/callee must be in the known service allowlist — unknown names are dropped silently
+        - Method and protocol validated against allowlists
+        - id and timestamp assigned by this service (not the caller)
+        - snake_case inbound, camelCase published (matches existing frontend contract)
+
+        Known service allowlist: gateway, game-state, deck-service, hand-evaluator,
+        dealer-ai, bank-service, auth-service, chat-service, email-service,
+        observability-service, document-service, auth-ui-service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventReport'
+            example:
+              caller: game-state
+              callee: deck-service
+              method: POST
+              path: /deal
+              status_code: 200
+              latency_ms: 4
+              protocol: http
+      responses:
+        '202':
+          description: Accepted
+
+  /rules:
+    get:
+      summary: Active filter rules and allowlists
+      description: Useful for debugging unexpected event drops during development.
+      responses:
+        '200':
+          description: Current filter configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesResponse'
+
+components:
+  schemas:
+    EventReport:
+      type: object
+      required: [caller, callee, method, path, status_code, latency_ms, protocol]
+      properties:
+        caller:
+          type: string
+          description: Reporting service name. Must be in known service allowlist.
+          example: game-state
+        callee:
+          type: string
+          description: Called service name. Must be in known service allowlist.
+          example: deck-service
+        method:
+          type: string
+          enum: [GET, POST, PUT, DELETE, PATCH, HEAD]
+        path:
+          type: string
+          description: Request path. Sanitized before publishing (UUIDs, IPs, JWTs stripped).
+          example: /deal
+        status_code:
+          type: integer
+          description: HTTP response status code. Must be 100–599.
+        latency_ms:
+          type: integer
+          description: Round-trip latency in milliseconds. Must be non-negative.
+        protocol:
+          type: string
+          enum: [http, https, sse, websocket, mtls]
+
+    PublishedEvent:
+      type: object
+      description: Shape published to Redis swarm:events channel and consumed by gateway SSE handler.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Assigned by observability-service
+        timestamp:
+          type: string
+          format: date-time
+          description: Assigned by observability-service (UTC)
+        caller:
+          type: string
+        callee:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+          description: Sanitized path
+        statusCode:
+          type: integer
+          description: camelCase to match frontend contract
+        latencyMs:
+          type: integer
+          description: camelCase to match frontend contract
+        protocol:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: observability-service
+        language:
+          type: string
+          example: Go
+        redis:
+          type: string
+          enum: [connected, disconnected]
+        events_received:
+          type: integer
+          description: Total events received since last restart
+        events_published:
+          type: integer
+          description: Total events published to Redis since last restart
+        events_dropped:
+          type: integer
+          description: Events dropped due to filter rules since last restart
+
+    RulesResponse:
+      type: object
+      properties:
+        service_allowlist:
+          type: array
+          items:
+            type: string
+        method_allowlist:
+          type: array
+          items:
+            type: string
+        protocol_allowlist:
+          type: array
+          items:
+            type: string
+        path_sanitization:
+          type: array
+          items:
+            type: object
+            properties:
+              pattern:
+                type: string
+              replacement:
+                type: string

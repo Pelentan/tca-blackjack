@@ -5,4 +5,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 COPY main.py .
 EXPOSE 3004
-CMD ["gunicorn", "--bind", "0.0.0.0:3004", "--workers", "2", "main:app"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+CMD ["/entrypoint.sh"]

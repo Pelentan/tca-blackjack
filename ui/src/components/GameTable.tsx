@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GameState, PlayerState, DealerState, PlayerAction } from '../types';
+import { GameState, PlayerState, DealerState, PlayerAction, Card } from '../types';
 import { CardComponent } from './Card';
 
 interface GameTableProps {
@@ -33,12 +33,18 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  blackjack: '🎉 BLACKJACK',
+  blackjack: '🎉 BLACKJACK!',
   won:       '✓ WIN',
   lost:      '✗ LOST',
   push:      '= PUSH',
   bust:      '✗ BUST',
 };
+
+// Detect five-card Charlie from hand length + status
+function getFiveCardLabel(hand: Card[], status: string): string | null {
+  if (hand.length >= 5 && (status === 'won' || status === 'standing')) return '🖐 FIVE CARD CHARLIE!';
+  return null;
+}
 
 const DealerView: React.FC<{ dealer: DealerState }> = ({ dealer }) => (
   <div style={{ textAlign: 'center', marginBottom: 24 }}>
@@ -73,7 +79,7 @@ const PlayerView: React.FC<{ player: PlayerState; isActive: boolean; isMe: boole
         color: STATUS_COLORS[player.status] || '#718096',
         textTransform: 'uppercase', letterSpacing: 1,
       }}>
-        {STATUS_LABELS[player.status] || player.status}
+        {getFiveCardLabel(player.hand, player.status) ?? STATUS_LABELS[player.status] ?? player.status}
       </span>
     </div>
 

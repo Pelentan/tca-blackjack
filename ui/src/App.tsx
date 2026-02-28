@@ -389,29 +389,7 @@ function App() {
         </div>
       )}
 
-      {/* Language legend */}
-      <div style={{
-        display: 'flex', gap: 12, flexWrap: 'wrap',
-        padding: '8px 12px', background: '#161b22',
-        borderRadius: 8, border: '1px solid #21262d',
-      }}>
-        {[
-          { name: 'Gateway',    lang: 'Go',         color: '#4a9eff' },
-          { name: 'Game State', lang: 'Go',         color: '#38a169' },
-          { name: 'Deck',       lang: 'Go',         color: '#d69e2e' },
-          { name: 'Hand Eval',  lang: 'Haskell',    color: '#a855f7' },
-          { name: 'Dealer AI',  lang: 'Python',     color: '#84cc16' },
-          { name: 'Bank',       lang: 'COBOL+Go',   color: '#ef4444' },
-          { name: 'Auth',       lang: 'TypeScript', color: '#0ea5e9' },
-          { name: 'Chat',       lang: 'Elixir',     color: '#e879f9' },
-        ].map(({ name, lang, color }) => (
-          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-            <span style={{ fontSize: '0.65rem', color: '#8b949e' }}>{name}</span>
-            <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>({lang})</span>
-          </div>
-        ))}
-      </div>
+
 
       {/* ── Modals ── */}
       {showModal && (

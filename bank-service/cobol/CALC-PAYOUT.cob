@@ -25,10 +25,10 @@
        DATA DIVISION.
        WORKING-STORAGE SECTION.
        01 WS-BET-CENTS        PIC 9(15)  VALUE ZERO.
-       01 WS-RESULT           PIC X(8)   VALUE SPACES.
+       01 WS-RESULT           PIC X(9)   VALUE SPACES.
        01 WS-RETURNED-CENTS   PIC 9(15)  VALUE ZERO.
        01 WS-PAYOUT-TYPE      PIC X(14)  VALUE SPACES.
-       01 WS-RESULT-TRIMMED   PIC X(8)   VALUE SPACES.
+       01 WS-RESULT-TRIMMED   PIC X(9)   VALUE SPACES.
 
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -42,8 +42,15 @@
            EVALUATE WS-RESULT-TRIMMED
                WHEN "BLACKJACK"
       *            Natural blackjack: 3:2 payout (stake + 1.5x profit)
-      *            Use integer arithmetic: 2.5x = (bet * 5) / 2
-                   COMPUTE WS-RETURNED-CENTS = (WS-BET-CENTS * 5) / 2
+      *            Profit rounded DOWN to nearest dollar — house keeps half-chip.
+      *            Step 1: profit = floor((bet * 3) / 2) in cents
+      *            Step 2: round down to nearest 100 cents (whole dollar)
+      *            Step 3: return stake + rounded profit
+                   COMPUTE WS-RETURNED-CENTS = (WS-BET-CENTS * 3) / 2
+                   COMPUTE WS-RETURNED-CENTS =
+                       (WS-RETURNED-CENTS / 100) * 100
+                   COMPUTE WS-RETURNED-CENTS =
+                       WS-BET-CENTS + WS-RETURNED-CENTS
                    MOVE "payout_win"  TO WS-PAYOUT-TYPE
 
                WHEN "WIN"

@@ -1,32 +1,74 @@
 # ── Swarm Blackjack — Docker Compose ─────────────────────────────────────────
 #
-# Architecture:
-#   - All services on isolated bridge network (swarm-net)
-#   - Only gateway and ui exposed externally
-#   - mTLS between services: cert generation via infra/scripts/gen-certs.sh
-#     (see README — run before first `docker compose up`)
-#   - Bank DB completely isolated: separate PostgreSQL instance,
-#     only bank-service has credentials
+# Network isolation model — each network represents a trust boundary:
+#
+#   frontend-net   gateway ↔ ui (external-facing only)
+#   game-net       gateway ↔ game-state ↔ deck, hand-evaluator, dealer-ai
+#   financial-net  bank-service ↔ bank-db (+ gateway, game-state, auth, document)
+#   auth-net       auth-service ↔ auth-db (+ auth-ui, email, gateway)
+#   redis-net      redis ↔ auth, bank, observability, gateway (pub/sub)
+#   obs-net        observability-service ↔ game-state, gateway
+#   mail-net       email-service ↔ postfix (SMTP isolated)
+#   data-net       game-state ↔ game-db (game DB isolated)
+#   comm-net       gateway ↔ chat-service
+#
+# Key isolation properties:
+#   bank-db    — unreachable from game domain, auth domain, redis, or any service
+#                outside financial-net
+#   auth-db    — unreachable from game domain, bank domain, or any service
+#                outside auth-net
+#   game-db    — unreachable from everything except game-state
+#   postfix    — unreachable from everything except email-service
+#   deck/hand/dealer-ai — unreachable from bank, auth, email, or observability
 #
 # Start:  docker compose up --build
 # Stop:   docker compose down
 # Logs:   docker compose logs -f [service-name]
 
 networks:
-  swarm-net:
+  frontend-net:
     driver: bridge
-    # Isolated internal network — nothing reaches services directly
-    # except through gateway
+  game-net:
+    driver: bridge
+  financial-net:
+    driver: bridge
+  auth-net:
+    driver: bridge
+  redis-net:
+    driver: bridge
+  obs-net:
+    driver: bridge
+  mail-net:
+    driver: bridge
+  data-net:
+    driver: bridge
+  comm-net:
+    driver: bridge
 
 volumes:
   game-db-data:
   bank-db-data:
   auth-db-data:
   redis-data:
+  mtls-certs:   # Ephemeral cert volume — populated by cert-init, destroyed on compose down
 
 services:
 
+  # ── cert-init ──────────────────────────────────────────────────────────────
+  # Runs once at startup. Generates ephemeral CA + per-service certs into
+  # the mtls-certs volume. All other services depend on this completing
+  # successfully before they start. Key material never touches the host
+  # filesystem or any image layer.
+  cert-init:
+    build: ./cert-init
+    container_name: swarm-cert-init
+    volumes:
+      - mtls-certs:/certs
+    restart: "no"  # Init container — run once and exit
+
   # ── Gateway ────────────────────────────────────────────────────────────────
+  # On every network — single entry point, routes to all domains.
+  # The only service with cross-domain visibility by design.
   gateway:
     build: ./gateway
     container_name: swarm-gateway
@@ -34,22 +76,39 @@ services:
       - "8021:8021"
     environment:
       PORT: "8021"
-      GAME_STATE_URL: "http://game-state:3001"
-      AUTH_URL: "http://auth-service:3006"
+      GAME_STATE_URL: "https://game-state:3001"
+      AUTH_URL: "https://auth-service:3006"
       AUTH_UI_URL: "http://auth-ui-service:3010"
-      BANK_URL: "http://bank-service:3005"
-      CHAT_URL: "http://chat-service:3007"
-      EMAIL_URL: "http://email-service:3008"
+      BANK_URL: "https://bank-service:3005"
+      CHAT_URL: "https://chat-service:3007"
+      EMAIL_URL: "https://email-service:3008"
       DOCUMENT_URL: "http://document-service:3011"
       UI_URL: "http://ui:3000"
       REDIS_URL: "redis:6379"
+      TLS_CERT: "/certs/gateway.crt"
+      TLS_KEY:  "/certs/gateway.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - frontend-net
+      - game-net
+      - financial-net
+      - auth-net
+      - redis-net
+      - obs-net
+      - comm-net
     depends_on:
-      - game-state
-      - auth-service
-      - redis
-      - observability-service
+      cert-init:
+        condition: service_completed_successfully
+      game-state:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      redis:
+        condition: service_started
+      observability-service:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/wget", "-qO-", "http://localhost:8021/health"]
@@ -58,74 +117,102 @@ services:
       retries: 3
 
   # ── Game Domain ────────────────────────────────────────────────────────────
+  # game-state orchestrates; deck/hand-evaluator/dealer-ai are internal only.
+  # Nothing outside game-net can reach deck, hand-evaluator, or dealer-ai.
   game-state:
     build: ./game-state
     container_name: swarm-game-state
     environment:
       PORT: "3001"
-      DECK_SERVICE_URL: "http://deck-service:3002"
-      HAND_EVALUATOR_URL: "http://hand-evaluator:3003"
-      DEALER_AI_URL: "http://dealer-ai:3004"
+      DECK_SERVICE_URL: "https://deck-service:3002"
+      HAND_EVALUATOR_URL: "https://hand-evaluator:3003"
+      DEALER_AI_URL: "https://dealer-ai:3004"
       OBSERVABILITY_URL: "http://observability-service:3009"
-      BANK_SERVICE_URL: "http://bank-service:3005"
+      BANK_SERVICE_URL: "https://bank-service:3005"
+      TLS_CERT: "/certs/game-state.crt"
+      TLS_KEY:  "/certs/game-state.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - game-net       # deck, hand-evaluator, dealer-ai, gateway
+      - financial-net  # bank-service
+      - obs-net        # observability-service
+      - data-net       # game-db
     depends_on:
-      - deck-service
-      - hand-evaluator
-      - dealer-ai
-      - observability-service
-      - bank-service
+      cert-init:
+        condition: service_completed_successfully
+      deck-service:
+        condition: service_started
+      hand-evaluator:
+        condition: service_started
+      dealer-ai:
+        condition: service_started
+      observability-service:
+        condition: service_started
+      bank-service:
+        condition: service_started
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "/wget", "-qO-", "http://localhost:3001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network
 
   deck-service:
     build: ./deck-service
     container_name: swarm-deck-service
     environment:
       PORT: "3002"
+      TLS_CERT: "/certs/deck-service.crt"
+      TLS_KEY:  "/certs/deck-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - game-net  # game-state only — nothing else can route here
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "/wget", "-qO-", "http://localhost:3002/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network
 
   hand-evaluator:
     build: ./hand-evaluator
     container_name: swarm-hand-evaluator
     environment:
       PORT: "3003"
+      TLS_CERT: "/certs/hand-evaluator.crt"
+      TLS_KEY:  "/certs/hand-evaluator.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - game-net  # game-state only
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network.
+    # Startup ordering handled by cert-init dependency.
 
   dealer-ai:
     build: ./dealer-ai
     container_name: swarm-dealer-ai
     environment:
       PORT: "3004"
+      TLS_CERT: "/certs/dealer-ai.crt"
+      TLS_KEY:  "/certs/dealer-ai.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - game-net  # game-state only
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3004/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network
 
   # ── Security & Financial Domain ────────────────────────────────────────────
+  # bank-db is on financial-net only — unreachable from every other domain.
+  # auth-db is on auth-net only — same guarantee.
   auth-service:
     build: ./auth-service
     container_name: swarm-auth
@@ -137,35 +224,52 @@ services:
       JWT_SECRET: "swarm-blackjack-dev-secret-change-in-production"
       EMAIL_URL: "http://email-service:3008"
       DOCUMENT_URL: "http://document-service:3011"
-      BANK_URL: "http://bank-service:3005"
-      # Verification links go through gateway so UI topology stays internal
+      BANK_URL: "https://bank-service:3005"
       GATEWAY_URL: "http://localhost:8021"
       UI_URL: "http://localhost:8021"
+      TLS_CERT: "/certs/auth-service.crt"
+      TLS_KEY:  "/certs/auth-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - auth-net       # auth-db, auth-ui-service, email-service, gateway
+      - financial-net  # bank-service, document-service
+      - redis-net      # redis (sessions, exchange codes)
     depends_on:
-      - redis
-      - auth-db
-      - email-service
-      - bank-service
-      - postfix
+      cert-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      auth-db:
+        condition: service_started
+      email-service:
+        condition: service_started
+      bank-service:
+        condition: service_started
+      postfix:
+        condition: service_started
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3006/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network
 
   auth-ui-service:
     build: ./auth-ui-service
     container_name: swarm-auth-ui
     environment:
       PORT: "3010"
-      AUTH_SERVICE_URL: "http://auth-service:3006"
+      AUTH_SERVICE_URL: "https://auth-service:3006"
+      TLS_CERT: "/certs/auth-ui-service.crt"
+      TLS_KEY:  "/certs/auth-ui-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - auth-net  # auth-service only — nothing else needed
     depends_on:
-      - auth-service
+      cert-init:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/wget", "-qO-", "http://localhost:3010/health"]
@@ -181,16 +285,21 @@ services:
     environment:
       PORT: "3005"
       DOCUMENT_SERVICE_URL: "http://document-service:3011"
+      TLS_CERT: "/certs/bank-service.crt"
+      TLS_KEY:  "/certs/bank-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - financial-net  # bank-db, document-service, gateway, game-state, auth-service
+      - redis-net      # redis (balance pub/sub)
     depends_on:
-      - bank-db
+      cert-init:
+        condition: service_completed_successfully
+      bank-db:
+        condition: service_started
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "/wget", "-qO-", "http://localhost:3005/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # No healthcheck — internal service on isolated network
 
   document-service:
     build: ./document-service
@@ -198,7 +307,7 @@ services:
     environment:
       PORT: "3011"
     networks:
-      - swarm-net
+      - financial-net  # called by bank-service and auth-service (both on financial-net)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3011/health"]
@@ -212,14 +321,18 @@ services:
     container_name: swarm-chat
     environment:
       PORT: "3007"
+      TLS_CERT: "/certs/chat-service.crt"
+      TLS_KEY:  "/certs/chat-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - comm-net  # gateway only — isolated from all other domains
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3007/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+    # No healthcheck — internal service on isolated network
 
   email-service:
     build: ./email-service
@@ -231,15 +344,24 @@ services:
       SMTP_FROM: "${SMTP_FROM}"
       SMTP_USE_TLS: "false"
       AUTH_SERVICE_URL: "http://auth-service:3006"
+      TLS_CERT: "/certs/email-service.crt"
+      TLS_KEY:  "/certs/email-service.key"
+      TLS_CA:   "/certs/ca.crt"
+    volumes:
+      - mtls-certs:/certs:ro
     networks:
-      - swarm-net
+      - auth-net   # auth-service (lookup, verification)
+      - mail-net   # postfix (SMTP delivery)
     depends_on:
-      - postfix
+      cert-init:
+        condition: service_completed_successfully
+      postfix:
+        condition: service_started
     restart: unless-stopped
 
   # ── Mail ───────────────────────────────────────────────────────────────────
-  # Custom Postfix on Debian — send-only MTA, direct MX delivery.
-  # No relay, no credentials, no third-party images.
+  # Postfix is on mail-net only — the only service that can reach it is email-service.
+  # No other service can attempt SMTP delivery.
   postfix:
     build: ./postfix
     container_name: swarm-postfix
@@ -254,7 +376,7 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     networks:
-      - swarm-net
+      - mail-net  # email-service only
     restart: unless-stopped
 
   # ── UI ─────────────────────────────────────────────────────────────────────
@@ -265,7 +387,7 @@ services:
         VITE_GATEWAY_URL: ""
     container_name: swarm-ui
     networks:
-      - swarm-net
+      - frontend-net  # gateway only — no internal service access
     depends_on:
       - gateway
     restart: unless-stopped
@@ -281,9 +403,8 @@ services:
     volumes:
       - game-db-data:/var/lib/postgresql/data
     networks:
-      - swarm-net
+      - data-net  # game-state only — no other service on this network
     restart: unless-stopped
-    # Not exposed externally — only reachable from swarm-net
 
   bank-db:
     image: postgres:16-alpine
@@ -295,9 +416,9 @@ services:
     volumes:
       - bank-db-data:/var/lib/postgresql/data
     networks:
-      - swarm-net
+      - financial-net  # bank-service only has DB credentials
+                       # gateway is also on financial-net but speaks HTTP, not PostgreSQL
     restart: unless-stopped
-    # Completely isolated — bank-service is the ONLY service with these credentials
 
   auth-db:
     image: postgres:16-alpine
@@ -310,9 +431,8 @@ services:
       - auth-db-data:/var/lib/postgresql/data
       - ./auth-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - swarm-net
+      - auth-net  # auth-service only has DB credentials
     restart: unless-stopped
-    # Completely isolated — auth-service is the ONLY service with these credentials
 
   redis:
     image: redis:7-alpine
@@ -321,9 +441,8 @@ services:
     volumes:
       - redis-data:/data
     networks:
-      - swarm-net
+      - redis-net  # auth (sessions), bank (balance pub/sub), observability (events), gateway
     restart: unless-stopped
-    # Session store — refresh tokens, rate limiting state, instant revocation
 
   # ── Observability ──────────────────────────────────────────────────────────
   observability-service:
@@ -333,9 +452,8 @@ services:
       PORT: "3009"
       REDIS_URL: "redis:6379"
     networks:
-      - swarm-net
+      - obs-net    # game-state reports here, gateway subscribes here
+      - redis-net  # redis pub/sub
     depends_on:
       - redis
     restart: unless-stopped
-    # Not exposed externally — internal only
-    # Scratch container: static binary, no shell, no attack surface

@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Hand Evaluator
+  description: |
+    Pure function service. Cards in → hand value out.
+    No state, no side effects, no database. The HTTP layer is the only impure
+    code in this service — all evaluation logic is pure Haskell functions.
+
+    Immutability and determinism make this provably correct: given the same
+    cards, the result is always identical. This is the right language choice
+    for the right problem.
+
+    Internal service — mTLS only, not externally exposed.
+  version: 0.1.0
+  contact:
+    name: Swarm Blackjack PoC
+
+servers:
+  - url: http://hand-evaluator:3003
+    description: Internal Docker network (mTLS enforced)
+
+paths:
+  /health:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /evaluate:
+    post:
+      summary: Evaluate a blackjack hand
+      description: |
+        Computes the optimal value of a blackjack hand.
+        Handles soft/hard totals: aces count as 11 unless doing so busts the hand,
+        in which case they count as 1. All ace reduction logic is handled here —
+        callers receive a single authoritative value.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateRequest'
+            examples:
+              soft_hand:
+                summary: Soft 17 (Ace + 6)
+                value:
+                  cards:
+                    - { suit: hearts, rank: A }
+                    - { suit: clubs, rank: '6' }
+              hard_hand:
+                summary: Hard 14 (7 + 7)
+                value:
+                  cards:
+                    - { suit: hearts, rank: '7' }
+                    - { suit: spades, rank: '7' }
+              blackjack:
+                summary: Natural blackjack
+                value:
+                  cards:
+                    - { suit: spades, rank: A }
+                    - { suit: hearts, rank: K }
+              bust:
+                summary: Bust hand
+                value:
+                  cards:
+                    - { suit: hearts, rank: '10' }
+                    - { suit: clubs, rank: '8' }
+                    - { suit: diamonds, rank: '6' }
+      responses:
+        '200':
+          description: Hand evaluated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandResult'
+              examples:
+                soft_17:
+                  value: { value: 17, isSoft: true, isBlackjack: false, isBust: false }
+                blackjack:
+                  value: { value: 21, isSoft: false, isBlackjack: true, isBust: false }
+                bust:
+                  value: { value: 24, isSoft: false, isBlackjack: false, isBust: true }
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Card:
+      type: object
+      required: [suit, rank]
+      properties:
+        suit:
+          type: string
+          enum: [hearts, diamonds, clubs, spades]
+          description: Card suit. Hidden cards are not sent to this service.
+        rank:
+          type: string
+          enum: [A, '2', '3', '4', '5', '6', '7', '8', '9', '10', J, Q, K]
+
+    EvaluateRequest:
+      type: object
+      required: [cards]
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+          minItems: 1
+          maxItems: 11
+          description: Cards in the hand to evaluate. Empty array is rejected.
+
+    HandResult:
+      type: object
+      required: [value, isSoft, isBlackjack, isBust]
+      properties:
+        value:
+          type: integer
+          description: |
+            Optimal hand value. For soft hands, this is the higher value (e.g. 17 for A+6,
+            not 7). For bust hands, this is the actual over-21 total.
+          minimum: 1
+        isSoft:
+          type: boolean
+          description: True if at least one ace is counting as 11.
+        isBlackjack:
+          type: boolean
+          description: True only for a natural two-card 21 (Ace + 10-value card).
+        isBust:
+          type: boolean
+          description: True if value exceeds 21.
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: hand-evaluator
+        language:
+          type: string
+          example: Haskell
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

@@ -16,16 +16,33 @@ defmodule ChatService.Application do
   use Application
 
   def start(_type, _args) do
-    port = String.to_integer(System.get_env("PORT") || "3007")
+    port      = String.to_integer(System.get_env("PORT")     || "3007")
+    tls_cert  = System.get_env("TLS_CERT")
+    tls_key   = System.get_env("TLS_KEY")
+    tls_ca    = System.get_env("TLS_CA")
 
-    children = [
-      {Plug.Cowboy, scheme: :http, plug: ChatService.Router, options: [port: port]},
-      ChatService.TableRegistry
-    ]
+    cowboy_child =
+      if tls_cert && tls_key && tls_ca do
+        {Plug.Cowboy,
+          scheme: :https,
+          plug: ChatService.Router,
+          options: [
+            port: port,
+            certfile: tls_cert,
+            keyfile:  tls_key,
+            cacertfile: tls_ca,
+            verify: :verify_peer,
+            fail_if_no_peer_cert: true
+          ]}
+      else
+        {Plug.Cowboy, scheme: :http, plug: ChatService.Router, options: [port: port]}
+      end
 
+    children = [cowboy_child, ChatService.TableRegistry]
     opts = [strategy: :one_for_one, name: ChatService.Supervisor]
 
-    IO.puts("💬 Chat Service (Elixir/OTP) starting on :#{port}")
+    mode = if tls_cert, do: "(mTLS)", else: "(plaintext — no TLS env vars)"
+    IO.puts("💬 Chat Service (Elixir/OTP) starting on :#{port} #{mode}")
     IO.puts("   Actor model: each table is a supervised process.")
     IO.puts("   Crash isolation: a dead table never kills the game.")
 

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -116,16 +118,54 @@ var (
 	balanceBus = NewBalanceBus()
 
 	serviceURLs = map[string]string{
-		"game-state": getEnv("GAME_STATE_URL", "http://game-state:3001"),
-		"auth":       getEnv("AUTH_URL", "http://auth-service:3006"),
+		"game-state": getEnv("GAME_STATE_URL", "https://game-state:3001"),
+		"auth":       getEnv("AUTH_URL", "https://auth-service:3006"),
 		"auth-ui":    getEnv("AUTH_UI_URL", "http://auth-ui-service:3010"),
-		"bank":       getEnv("BANK_URL", "http://bank-service:3005"),
-		"chat":       getEnv("CHAT_URL", "http://chat-service:3007"),
-		"email":      getEnv("EMAIL_URL", "http://email-service:3008"),
+		"bank":       getEnv("BANK_URL", "https://bank-service:3005"),
+		"chat":       getEnv("CHAT_URL", "https://chat-service:3007"),
+		"email":      getEnv("EMAIL_URL", "https://email-service:3008"),
 		"document":   getEnv("DOCUMENT_URL", "http://document-service:3011"),
 		"ui":         getEnv("UI_URL", "http://ui:3000"),
 	}
+
+	// mtlsTransport is used by all proxies targeting https:// upstreams.
+	// Initialized in initMTLSTransport() at startup.
+	mtlsTransport *http.Transport
 )
+
+func initMTLSTransport() {
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
+
+	if certFile == "" || keyFile == "" || caFile == "" {
+		log.Println("[gateway][tls] no cert env vars — plain HTTP transport for upstream calls")
+		return
+	}
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatalf("[gateway][tls] failed to load client cert: %v", err)
+	}
+
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[gateway][tls] failed to read CA cert: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[gateway][tls] failed to parse CA cert")
+	}
+
+	mtlsTransport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caPool,
+			MinVersion:   tls.VersionTLS12,
+		},
+	}
+	log.Println("[gateway][tls] mTLS transport ready — upstream calls use mutual TLS")
+}
 
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -135,6 +175,8 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
+	initMTLSTransport()
+
 	mux := http.NewServeMux()
 
 	// Health
@@ -183,8 +225,9 @@ func main() {
 	// In production this would be a CDN or static file server.
 	mux.HandleFunc("/", instrumentedProxy("ui", serviceURLs["ui"]))
 
-	port := getEnv("PORT", "8021")
-	log.Printf("[gateway] starting on :%s", port)
+	port      := getEnv("PORT", "8021")
+	certFile  := getEnv("TLS_CERT", "")
+	keyFile   := getEnv("TLS_KEY", "")
 
 	// Subscribe to Redis for internal service events
 	go subscribeRedis()
@@ -210,6 +253,12 @@ func main() {
 		}
 	}()
 
+	// Gateway listens externally on plain HTTP — TLS termination happens here
+	// for external clients. Internal upstreams use mTLS via mtlsTransport.
+	// (Gateway could also terminate TLS externally with a proper cert — future work)
+	_ = certFile
+	_ = keyFile
+	log.Printf("[gateway] starting on :%s (plain HTTP external, mTLS upstream)", port)
 	if err := http.ListenAndServe(":"+port, corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
@@ -224,6 +273,9 @@ func instrumentedProxyWithRewrite(callee, targetURL, stripPrefix, addPrefix stri
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately — required for SSE pass-through
+	if target.Scheme == "https" && mtlsTransport != nil {
+		proxy.Transport = mtlsTransport
+	}
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
@@ -276,6 +328,9 @@ func instrumentedProxy(callee, targetURL string) http.HandlerFunc {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // flush immediately — required for SSE pass-through
+	if target.Scheme == "https" && mtlsTransport != nil {
+		proxy.Transport = mtlsTransport
+	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Printf("proxy error [%s]: %v", callee, err)
 		w.Header().Set("Content-Type", "application/json")
@@ -554,7 +609,12 @@ func devResetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := make(map[string]string)
-	client := &http.Client{Timeout: 5 * time.Second}
+	var client *http.Client
+	if mtlsTransport != nil {
+		client = &http.Client{Timeout: 5 * time.Second, Transport: mtlsTransport}
+	} else {
+		client = &http.Client{Timeout: 5 * time.Second}
+	}
 
 	for name, url := range services {
 		resp, err := client.Post(url, "application/json", nil)
@@ -597,7 +657,12 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkUpstream(healthURL string) string {
-	client := &http.Client{Timeout: 2 * time.Second}
+	var client *http.Client
+	if mtlsTransport != nil && strings.HasPrefix(healthURL, "https://") {
+		client = &http.Client{Timeout: 2 * time.Second, Transport: mtlsTransport}
+	} else {
+		client = &http.Client{Timeout: 2 * time.Second}
+	}
 	resp, err := client.Get(healthURL)
 	if err != nil {
 		return "unreachable"

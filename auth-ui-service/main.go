@@ -20,6 +20,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,9 +34,46 @@ import (
 )
 
 var (
-	authServiceURL = getEnv("AUTH_SERVICE_URL", "http://auth-service:3006")
+	authServiceURL = getEnv("AUTH_SERVICE_URL", "https://auth-service:3006")
 	port           = getEnv("PORT", "3010")
+	mtlsClient     *http.Client
 )
+
+func initMTLSClient() {
+	certFile := getEnv("TLS_CERT", "")
+	keyFile  := getEnv("TLS_KEY", "")
+	caFile   := getEnv("TLS_CA", "")
+
+	if certFile == "" || keyFile == "" || caFile == "" {
+		mtlsClient = &http.Client{Timeout: 10 * time.Second}
+		log.Println("[auth-ui] no TLS env vars — plain HTTP client")
+		return
+	}
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatalf("[auth-ui][tls] failed to load client cert: %v", err)
+	}
+	caCert, err := os.ReadFile(caFile)
+	if err != nil {
+		log.Fatalf("[auth-ui][tls] failed to read CA: %v", err)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("[auth-ui][tls] failed to parse CA cert")
+	}
+	mtlsClient = &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				RootCAs:      caPool,
+				MinVersion:   tls.VersionTLS12,
+			},
+		},
+	}
+	log.Println("[auth-ui][tls] mTLS client ready")
+}
 
 // ── Field definitions ─────────────────────────────────────────────────────────
 
@@ -145,7 +184,7 @@ func forwardToAuth(action string, fields map[string]string) (*AuthResult, int, s
 
 	body, _ := json.Marshal(payload)
 	start := time.Now()
-	resp, err := http.Post(authServiceURL+endpoint, "application/json", bytes.NewReader(body))
+	resp, err := mtlsClient.Post(authServiceURL+endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("[auth-ui] auth-service unreachable (%dms): %v", time.Since(start).Milliseconds(), err)
 		return nil, 503, "authentication service unavailable"
@@ -199,7 +238,7 @@ func proxyToAuth(w http.ResponseWriter, r *http.Request, authPath string) {
 	}
 
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := mtlsClient.Do(req)
 	if err != nil {
 		log.Printf("[auth-ui] auth-service unreachable at %s (%dms): %v", authPath, time.Since(start).Milliseconds(), err)
 		writeJSON(w, 503, map[string]string{"error": "authentication service unavailable"})
@@ -324,7 +363,7 @@ func passkeyHandler(w http.ResponseWriter, r *http.Request) {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	authStatus := "unreachable"
-	resp, err := http.Get(authServiceURL + "/health")
+	resp, err := mtlsClient.Get(authServiceURL + "/health")
 	if err == nil {
 		resp.Body.Close()
 		if resp.StatusCode == 200 {
@@ -351,6 +390,8 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
+	initMTLSClient()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/fields", fieldsHandler)
 	mux.HandleFunc("/submit", submitHandler)

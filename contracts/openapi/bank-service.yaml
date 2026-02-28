@@ -1,0 +1,517 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Bank Service
+  description: |
+    Player financial ledger. All arithmetic validated by GnuCOBOL programs —
+    the Go layer handles HTTP and database I/O; COBOL handles the math.
+
+    Why COBOL? Financial arithmetic in COBOL is inherently fixed-point decimal.
+    No floats, no rounding surprises, no IEEE 754 edge cases near money.
+    The VALIDATE-DEBIT, CALC-PAYOUT, and CALC-CREDIT programs are compiled
+    native binaries called synchronously via subprocess.
+
+    Three COBOL programs in the hot path:
+    - VALIDATE-DEBIT: checks sufficient funds, computes new balance after debit
+    - CALC-PAYOUT: determines return amount given bet and result (win/loss/push/blackjack)
+    - CALC-CREDIT: adds a credit to an existing balance
+
+    Completely isolated database (bank-db). No other service has credentials.
+    Re-validates session on every financial operation regardless of JWT state.
+    Balance updates published to Redis (swarm:balance) for real-time UI.
+
+    Internal service — mTLS only, not externally exposed. All external access
+    proxied through the API Gateway with session scope enforcement.
+
+    See companion document: contracts/openapi/bank-service-contract.md (if present)
+    for COBOL program interface details.
+  version: 0.1.0
+
+servers:
+  - url: http://bank-service:3005
+    description: Internal Docker network (mTLS enforced)
+
+tags:
+  - name: accounts
+    description: Account lifecycle
+  - name: transactions
+    description: Financial operations — all arithmetic via COBOL
+  - name: export
+    description: Transaction history export
+  - name: dev
+    description: Development utilities — remove before production
+
+paths:
+  /health:
+    get:
+      summary: Service health
+      tags: [accounts]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /account:
+    post:
+      summary: Create player account
+      description: |
+        Idempotent from the caller's perspective — returns 409 if account already exists.
+        Called by auth-service on first successful login. Starting balance defaults to
+        1000.00 chips if not specified.
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Account already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /balance:
+    get:
+      summary: Get player chip balance
+      tags: [accounts]
+      parameters:
+        - $ref: '#/components/parameters/PlayerIdQuery'
+      responses:
+        '200':
+          description: Current balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transactions:
+    get:
+      summary: Get transaction history
+      description: Returns up to 50 most recent transactions, newest first.
+      tags: [transactions]
+      parameters:
+        - $ref: '#/components/parameters/PlayerIdQuery'
+      responses:
+        '200':
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /bet:
+    post:
+      summary: Place a bet (debit from balance)
+      description: |
+        Validates sufficient funds via COBOL VALIDATE-DEBIT program, then records
+        the bet as an open transaction. Returns a transactionId used to settle
+        via /payout.
+
+        Demo player auto-replenish: if the demo player runs out of chips, balance
+        is automatically reset to 1000.00 before the bet is processed.
+
+        Balance update published to Redis on success.
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BetRequest'
+      responses:
+        '200':
+          description: Bet placed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsufficientFundsError'
+
+  /payout:
+    post:
+      summary: Settle a bet (credit payout to balance)
+      description: |
+        Looks up the open bet by transactionId, computes return amount via
+        COBOL CALC-PAYOUT, credits balance via COBOL CALC-CREDIT, marks
+        transaction as settled.
+
+        Payout multipliers:
+        - win: returns bet × 2 (original bet + winnings)
+        - blackjack: returns bet × 2.5 (3:2 payout)
+        - push: returns original bet (no gain, no loss)
+        - loss: returns 0
+
+        Balance update published to Redis on success.
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayoutRequest'
+      responses:
+        '200':
+          description: Payout settled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Transaction not found or already settled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /deposit:
+    post:
+      summary: Credit chips to player balance
+      description: |
+        General-purpose credit operation. Used for admin top-ups, bonuses, etc.
+        Arithmetic via COBOL CALC-CREDIT. Balance update published to Redis.
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositWithdrawRequest'
+      responses:
+        '200':
+          description: Deposit applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /withdraw:
+    post:
+      summary: Debit chips from player balance
+      description: |
+        General-purpose debit operation. Validates sufficient funds via
+        COBOL VALIDATE-DEBIT. Balance update published to Redis.
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositWithdrawRequest'
+      responses:
+        '200':
+          description: Withdrawal applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsufficientFundsError'
+
+  /export:
+    get:
+      summary: Export transaction history as PDF
+      description: |
+        Fetches up to 200 transactions for the player, formats them as a document
+        request, and proxies the PDF response from document-service.
+        Returns the raw PDF binary — caller streams directly to client.
+      tags: [export]
+      parameters:
+        - $ref: '#/components/parameters/PlayerIdQuery'
+      responses:
+        '200':
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          description: Document service unavailable
+
+  /dev/reset:
+    post:
+      summary: Wipe all accounts and re-seed demo player
+      description: DEV ONLY. Remove before production.
+      tags: [dev]
+      responses:
+        '200':
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reset:
+                    type: boolean
+                    example: true
+
+components:
+  parameters:
+    PlayerIdQuery:
+      name: playerId
+      in: query
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Player UUID
+
+  schemas:
+    CreateAccountRequest:
+      type: object
+      required: [playerId]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        startingBalance:
+          type: string
+          description: Decimal string e.g. "1000.00". Defaults to 1000.00 if absent.
+          example: "1000.00"
+
+    AccountResponse:
+      type: object
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        balance:
+          type: string
+          description: Decimal string balance
+          example: "1000.00"
+
+    BalanceResponse:
+      type: object
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        balance:
+          type: string
+          description: Current balance as decimal string
+          example: "750.00"
+
+    BalanceUpdateResponse:
+      type: object
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        newBalance:
+          type: string
+          description: Balance after operation
+          example: "850.00"
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [bet, payout_win, payout_blackjack, payout_push, payout_loss, deposit, withdrawal]
+        amount:
+          type: string
+          description: Decimal string
+        balanceBefore:
+          type: string
+          description: Decimal string
+        balanceAfter:
+          type: string
+          description: Decimal string
+        createdAt:
+          type: string
+          format: date-time
+
+    TransactionListResponse:
+      type: object
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+
+    BetRequest:
+      type: object
+      required: [playerId, amount]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          description: Bet amount as decimal string e.g. "50.00"
+          example: "50.00"
+
+    BetResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: Use this ID to settle via /payout
+        playerId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          example: "50.00"
+        newBalance:
+          type: string
+          description: Balance after bet deducted
+          example: "950.00"
+
+    PayoutRequest:
+      type: object
+      required: [transactionId, result]
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+          description: The transactionId returned by /bet
+        result:
+          type: string
+          enum: [win, loss, push, blackjack]
+          description: |
+            Hand outcome. Determines COBOL CALC-PAYOUT multiplier:
+            win=2x, blackjack=2.5x, push=1x (return stake), loss=0x
+
+    PayoutResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        playerId:
+          type: string
+          format: uuid
+        result:
+          type: string
+          enum: [win, loss, push, blackjack]
+        betAmount:
+          type: string
+          example: "50.00"
+        returned:
+          type: string
+          description: Amount credited back (0.00 for loss)
+          example: "100.00"
+        newBalance:
+          type: string
+          example: "1050.00"
+
+    DepositWithdrawRequest:
+      type: object
+      required: [playerId, amount]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          description: Decimal string, must be positive
+          example: "100.00"
+        note:
+          type: string
+          description: Optional memo recorded with transaction
+          example: "Admin top-up"
+
+    InsufficientFundsError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: insufficient_funds
+        balance:
+          type: string
+          description: Current balance
+          example: "30.00"
+        requested:
+          type: string
+          description: Amount that was requested
+          example: "50.00"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: bank-service
+        language:
+          type: string
+          example: Go + COBOL (GnuCOBOL)
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Missing or invalid fields
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Player account not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

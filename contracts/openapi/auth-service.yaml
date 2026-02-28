@@ -1,0 +1,593 @@
+openapi: 3.1.0
+info:
+  title: Swarm Blackjack - Auth Service
+  description: |
+    Identity, passkey authentication, and session management.
+    TypeScript/Node.js with SimpleWebAuthn v10.
+
+    Authentication flow:
+    1. POST /register — create unverified account, triggers email verification
+    2. GET /verify-token — validates email link, issues one-time exchange code
+    3. POST /exchange — exchange code → bootstrap JWT (scope: enroll, 5min TTL)
+    4. POST /passkey/register/begin — start WebAuthn credential creation ceremony
+    5. POST /passkey/register/complete — finish ceremony, store credential, issue session JWT
+    6. POST /passkey/login/begin — start WebAuthn assertion ceremony
+    7. POST /passkey/login/complete — verify assertion, issue session JWT
+
+    Token model:
+    - Bootstrap JWT (scope: enroll): issued after email verification, 5min TTL.
+      Required to register a passkey. Not valid for game access.
+    - Session JWT (scope: session): issued after passkey authentication, 15min TTL.
+      Required for all protected game operations.
+    - Exchange code: single-use UUID in Redis, 60s TTL. Bridges email verification
+      redirect to bootstrap JWT issuance without exposing tokens in URLs.
+
+    All passkey operations use the WebAuthn Level 2 ceremony model.
+    Challenges are stored in Redis, consumed on use (single-use, 5min TTL).
+    Counter is stored and verified on every authentication — replay protection.
+
+    Internal service — mTLS only. Reachable from gateway (auth-net) and
+    auth-ui-service (auth-net) only.
+  version: 0.1.0
+
+servers:
+  - url: http://auth-service:3006
+    description: Internal Docker network (mTLS enforced)
+
+tags:
+  - name: registration
+    description: Account creation and email verification
+  - name: passkey
+    description: WebAuthn passkey ceremony endpoints
+  - name: session
+    description: Session validation and service-to-service auth
+  - name: internal
+    description: Service-to-service endpoints (not proxied to browser)
+  - name: dev
+    description: Development utilities — remove before production
+
+paths:
+  /health:
+    get:
+      summary: Service health
+      tags: [session]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /users/{playerId}/email:
+    get:
+      summary: Look up player email by UUID
+      description: Used by email-service to resolve user_id to email address.
+      tags: [internal]
+      parameters:
+        - name: playerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Email found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: string
+                    format: email
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /register:
+    post:
+      summary: Create a new player account
+      description: |
+        Creates an unverified account and sends a verification email.
+        Account cannot authenticate until email is verified via /verify-token.
+        Also creates a bank account (via bank-service) with default starting balance.
+      tags: [registration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created, verification email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Missing fields or invalid email format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /verify-token:
+    get:
+      summary: Verify email link and redirect to UI
+      description: |
+        Called when user clicks the verification link in their email.
+        Validates the token from Redis, marks the player as verified,
+        issues a one-time exchange code (60s TTL), and redirects to the UI.
+        Browser receives a 302 redirect to {UI_URL}?exchange={code}.
+        Returns HTML error page on failure — not JSON.
+      tags: [registration]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: UUID token from the verification email
+      responses:
+        '302':
+          description: Redirect to UI with exchange code
+          headers:
+            Location:
+              schema:
+                type: string
+                example: http://localhost:8021?exchange=<uuid>
+        '400':
+          description: Invalid or already-used token (HTML error page)
+
+  /exchange:
+    post:
+      summary: Exchange one-time code for bootstrap JWT
+      description: |
+        Exchanges the short-lived code from email verification for a bootstrap JWT.
+        Bootstrap JWT has scope "enroll" and 5min TTL — only valid for passkey registration.
+        A full session JWT is NOT issued here; the client must complete passkey enrollment.
+        Exchange code is consumed on use (single-use Redis key).
+      tags: [registration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequest'
+      responses:
+        '200':
+          description: Bootstrap JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeResponse'
+        '401':
+          description: Invalid or expired exchange code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /passkey/register/begin:
+    post:
+      summary: Begin passkey registration ceremony
+      description: |
+        Requires a valid JWT (scope: enroll or session).
+        Generates WebAuthn PublicKeyCredentialCreationOptions and stores
+        the challenge in Redis (5min TTL).
+        Excludes existing credentials to prevent duplicate enrollment.
+      tags: [passkey]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: WebAuthn creation options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnCreationOptions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /passkey/register/complete:
+    post:
+      summary: Complete passkey registration ceremony
+      description: |
+        Verifies the WebAuthn attestation response, stores the credential,
+        and issues a full session JWT (scope: session, 15min TTL).
+        Counter is stored — verified on every future authentication.
+      tags: [passkey]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnRegistrationResponse'
+      responses:
+        '200':
+          description: Passkey registered, session JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTokenResponse'
+        '400':
+          description: Attestation verification failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /passkey/login/begin:
+    post:
+      summary: Begin passkey authentication ceremony
+      description: |
+        Generates WebAuthn PublicKeyCredentialRequestOptions.
+        If email is provided, scopes the options to that user's credentials.
+        Stores challenge in Redis (5min TTL, single-use).
+      tags: [passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyLoginBeginRequest'
+      responses:
+        '200':
+          description: WebAuthn request options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnRequestOptions'
+        '404':
+          description: Email not found (when email is provided)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /passkey/login/complete:
+    post:
+      summary: Complete passkey authentication ceremony
+      description: |
+        Verifies the WebAuthn assertion, checks counter for replay protection,
+        updates counter in DB, issues session JWT (scope: session, 15min TTL).
+        Creates Redis session key for fast validation.
+      tags: [passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnAuthenticationResponse'
+      responses:
+        '200':
+          description: Authentication successful, session JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTokenResponse'
+        '400':
+          description: Assertion verification failed or counter mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Challenge not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /validate:
+    post:
+      summary: Validate a JWT and session
+      description: |
+        Verifies JWT signature and checks Redis for active session.
+        Used by gateway and internal services to confirm a token is valid and not revoked.
+        Returns player identity if valid.
+      tags: [session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: JWT to validate
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidateResponse'
+        '401':
+          description: Invalid token or revoked session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /notify/transaction:
+    post:
+      summary: Queue a transaction receipt email
+      description: |
+        Called by bank-service after a financial operation.
+        Delegates to email-service (fire and forget from caller's perspective).
+      tags: [internal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionNotifyRequest'
+      responses:
+        '202':
+          description: Notification queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued:
+                    type: boolean
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /policy/check:
+    post:
+      summary: OPA policy check (stub)
+      description: |
+        Stub for Open Policy Agent integration. Always returns allowed: true.
+        Replace with real OPA evaluation before production.
+      tags: [internal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playerId:
+                  type: string
+                action:
+                  type: string
+      responses:
+        '200':
+          description: Policy result (always allowed in stub)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  playerId:
+                    type: string
+                  action:
+                    type: string
+                  stub:
+                    type: boolean
+
+  /dev/demo-token:
+    get:
+      summary: Issue a 24h session JWT for the demo player
+      description: |
+        DEV ONLY. No authentication required.
+        Issues a long-lived session JWT for the hardcoded demo player.
+        Used by the auto-playing demo loop. Remove before production.
+      tags: [dev]
+      responses:
+        '200':
+          description: Demo token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  playerId:
+                    type: string
+
+  /dev/reset:
+    post:
+      summary: Wipe all players, credentials, and sessions
+      description: DEV ONLY. Truncates all auth tables and flushes Redis. Remove before production.
+      tags: [dev]
+      responses:
+        '200':
+          description: Reset complete
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Bootstrap JWT (scope: enroll) for passkey registration endpoints.
+        Session JWT (scope: session) for session-protected endpoints.
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          description: Display name
+
+    RegisterResponse:
+      type: object
+      properties:
+        registered:
+          type: boolean
+        message:
+          type: string
+          example: "Verification email sent. Check your inbox and click the link to activate your account."
+        email:
+          type: string
+          format: email
+
+    ExchangeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          format: uuid
+          description: One-time exchange code from /verify-token redirect
+
+    ExchangeResponse:
+      type: object
+      properties:
+        bootstrapToken:
+          type: string
+          description: JWT with scope=enroll, 5min TTL. Use to register a passkey.
+        requiresEnrollment:
+          type: boolean
+          example: true
+        playerId:
+          type: string
+          format: uuid
+        playerName:
+          type: string
+        email:
+          type: string
+          format: email
+
+    PasskeyLoginBeginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: |
+            Optional. If provided, scopes credential options to this user.
+            Omit for usernameless (discoverable credential) flow.
+
+    WebAuthnCreationOptions:
+      type: object
+      description: WebAuthn PublicKeyCredentialCreationOptions — passed directly to browser's navigator.credentials.create()
+
+    WebAuthnRequestOptions:
+      type: object
+      description: WebAuthn PublicKeyCredentialRequestOptions — passed directly to browser's navigator.credentials.get()
+
+    WebAuthnRegistrationResponse:
+      type: object
+      description: RegistrationResponseJSON from SimpleWebAuthn browser library (v10)
+
+    WebAuthnAuthenticationResponse:
+      type: object
+      description: AuthenticationResponseJSON from SimpleWebAuthn browser library (v10)
+
+    SessionTokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: Session JWT, scope=session, 15min TTL
+        expiresIn:
+          type: integer
+          description: Seconds until expiry
+          example: 900
+        playerId:
+          type: string
+          format: uuid
+        playerName:
+          type: string
+        email:
+          type: string
+          format: email
+        passkeyEnrolled:
+          type: boolean
+
+    ValidateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        playerId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [session, enroll]
+        expiresAt:
+          type: string
+          format: date-time
+
+    TransactionNotifyRequest:
+      type: object
+      required: [playerId]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+        transactionId:
+          type: string
+        amount:
+          type: string
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        balanceAfter:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+        language:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

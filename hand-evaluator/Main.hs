@@ -16,7 +16,10 @@ import Data.Aeson.Types (Parser, parseJSON, toJSON, Value)
 import GHC.Generics (Generic)
 import Network.HTTP.Types (status200, status400, status405, hContentType, Status)
 import Network.Wai (Application, Request, Response, ResponseReceived, requestMethod, requestBody, responseLBS, pathInfo)
-import Network.Wai.Handler.Warp (run)
+import Network.Wai.Handler.Warp (run, defaultSettings, setPort)
+import Network.Wai.Handler.WarpTLS (runTLS, tlsSettings, TLSSettings(..))
+import qualified Network.TLS as TLS
+import Data.Default (def)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
@@ -133,8 +136,29 @@ jsonResponse status body = responseLBS status
 
 main :: IO ()
 main = do
-  portStr <- lookupEnv "PORT"
+  portStr  <- lookupEnv "PORT"
+  certFile <- lookupEnv "TLS_CERT"
+  keyFile  <- lookupEnv "TLS_KEY"
   let port = maybe 3003 read portStr :: Int
-  putStrLn $ "[hand-evaluator] starting on :" ++ show port
-  putStrLn   "[hand-evaluator] Pure function: Cards in -> value out. No state. No side effects."
-  run port app
+      settings = setPort port defaultSettings
+
+  case (certFile, keyFile) of
+    (Just cert, Just key) -> do
+      putStrLn $ "[hand-evaluator] starting on :" ++ show port ++ " (mTLS)"
+      putStrLn   "[hand-evaluator] Pure function: Cards in -> value out. No state. No side effects."
+      let tlsCfg = (tlsSettings cert key)
+            { tlsWantClientCert = True
+            , tlsServerHooks    = (def :: TLS.ServerHooks)
+                { TLS.onClientCertificate = \chain ->
+                    case chain of
+                      TLS.CertificateChain [] ->
+                        return $ TLS.CertificateUsageReject
+                          (TLS.CertificateRejectOther "mTLS: client cert required")
+                      _ -> return TLS.CertificateUsageAccept
+                }
+            }
+      runTLS tlsCfg settings app
+    _ -> do
+      putStrLn $ "[hand-evaluator] starting on :" ++ show port ++ " (plaintext — no TLS env vars)"
+      putStrLn   "[hand-evaluator] Pure function: Cards in -> value out. No state. No side effects."
+      run port app

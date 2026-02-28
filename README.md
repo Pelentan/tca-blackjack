@@ -22,9 +22,9 @@ Browser → UI (React/TypeScript)
                → Deck Service (Go)
                → Hand Evaluator (Haskell)
                → Dealer AI (Python)
-               → Bank Service (Java)
+               → Bank Service (COBOL+Go)
                → Game DB (PostgreSQL)
-           → Bank Service (Java)       ← financial operations, BigDecimal arithmetic
+           → Bank Service (COBOL+Go)   ← financial arithmetic in COBOL, REST API in Go
                → Bank DB (PostgreSQL)
            → Chat Service (Elixir)
            → Email Service (Python)    ← real SMTP via Postfix/Gmail relay
@@ -46,7 +46,7 @@ See `infra/swarm-architecture.html` for the full visual diagram.
 | Deck Service | Go | Pure computation, speed at scale. |
 | Hand Evaluator | **Haskell** | Pure function. Cards in → value out. Haskell's type system makes it *provably correct* — the compiler enforces no side effects. This is exactly the use case Haskell was designed for. |
 | Dealer AI | Python | Rule-based today. The architecture leaves a clean ML upgrade path — swap the decision function, keep the endpoint contract. Python's ML ecosystem is unmatched. |
-| Bank Service | Java | Financial arithmetic. `BigDecimal` everywhere — float arithmetic is a compile error here. |
+| Bank Service | COBOL + Go | Financial arithmetic in COBOL — integer cent arithmetic, no floats near money. Go provides the REST API layer and PostgreSQL integration. |
 | Auth Service | TypeScript | WebAuthn/passkey ecosystem deepest here. `@simplewebauthn/server` v10 is the gold standard. |
 | Chat Service | Elixir | This is literally what it was designed for. WhatsApp runs on it. OTP supervision trees: a crashed process restarts in isolation, never takes down the game. |
 | Email Service | Python | Real SMTP delivery via Postfix. Swap transport with zero upstream changes. |
@@ -134,8 +134,7 @@ Internal calls use mTLS on the isolated Docker network. Identity verification an
 chmod +x infra/scripts/gen-certs.sh
 ./infra/scripts/gen-certs.sh
 
-# Build and start all services
-cd infra
+# Build and start all services (from project root)
 docker compose up --build
 ```
 
@@ -171,7 +170,7 @@ The UI has a **⚠ Reset DB** button in the header. It wipes all player accounts
 
 ### What you'll see
 
-1. **Game loop** (no auth required): SSE connection established, demo table cycles automatically through betting → dealing → player turn → dealer turn → payout. Every phase triggers calls to Deck (Go), Hand Evaluator (Haskell), Dealer AI (Python), Bank (Java).
+1. **Game loop** (no auth required): SSE connection established, demo table cycles automatically through betting → dealing → player turn → dealer turn → payout. Every phase triggers calls to Deck (Go), Hand Evaluator (Haskell), Dealer AI (Python), Bank (COBOL+Go).
 
 2. **Observability panel**: every inter-service call visible in real-time — caller, callee, protocol, latency, status. Container hostname on each game state update shows which instance handled it.
 
@@ -220,7 +219,7 @@ No architectural changes required for K8s. That was the point.
 | Deck Service | ✅ Functional | Real shuffle/deal, penetration threshold, reshuffle |
 | Hand Evaluator | ✅ Functional | Pure Haskell, soft/hard totals, bust detection |
 | Dealer AI | ✅ Functional | Rule-based strategy, ML upgrade path preserved |
-| Bank Service | ⚠️ In-memory | Real BigDecimal math, PostgreSQL migration pending |
+| Bank Service | ✅ Functional | COBOL financial arithmetic, PostgreSQL persistence, real-time balance via Redis |
 | Chat Service | ⚠️ Stub | Elixir/OTP skeleton, WebSocket pending |
 | Email Service | ✅ Functional | Real SMTP via Postfix/Gmail relay |
 | Observability | ✅ Functional | Live service call feed, Redis pub/sub, dashboard |
