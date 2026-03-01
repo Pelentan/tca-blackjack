@@ -2,10 +2,23 @@
 
 **Proof-of-Concept: Polyglot Microservices · Zero Trust · AI-Augmented Development**
 
-A fully functional blackjack application built to demonstrate modern TCA architecture — discrete services in isolated containers, each written in the best language for its job, communicating via REST and SSE, with a working Zero Trust authentication chain built on passkeys.
+## What is Tessellated Constellation Architecture (TCA)
 
-> *"AI amplifying expertise, not replacing engineers."*  
-> This codebase was architected and implemented through AI-augmented development. The architecture decisions, security design, and engineering judgment came from human expertise. The implementation was accelerated by an AI partner fluent in every language in the stack.
+I'm working on a white paper to explain the Tessellated Constellation Architecture concept in detail, but I'll try to cover it briefly here. I've been working on developing how the IT arena should be working with AI. Not theorizing. But developing working examples of what can be done. Not what might work. What does work. I did my first example here: https://github.com/Pelentan/lora-dataset-prep. In this project I wanted to try out what I thought was a whole new way of creating an application that was only feasible with an AI partner. Ah… Age and memory. It was only when I finished and looked closer that I realized I was standing on the shoulders of giants. Almost every aspect of this architecture has been around for a while and I was only half-remembering them. What I brought was the extraction of the core ideas and principles of all these different concepts and combining them together in a cohesive, repeatable, architecture. One that I would argue was impossible last year. And required this year.
+
+The initial concept was an application broken down into discrete Jobs. Ones that have a fixed set of inputs and a fixed set of outputs that never changed. And didn't care where they were coming from or going to. Many might recognize this as "micro-services."
+
+That brought the first blast from the past: contracts. And not something that was written after the code to describe what it does. But rather created before the first line of code and held to. During initial development some drift was allowed as I realized new things needed to be added. But the core required to be the same. This also means that a developer, human or AI, doesn't need to know anything more than that one Job. Their entire world is encapsulated in that contract. And the rest of the universe doesn't give a damn what that developer does inside that Job, just as long as the output part of that contract is adhered to.
+
+Which brought the next concept. Best language for the Job. I had already made the decision that all Jobs were going to be in their own container. So, the architectural hurdle was already solved. But that left knowing how to program all the different languages that might be pulled in. I've often said that if you know how to code, you basically know how to code any modern language. And I've proven that out repeatedly. That doesn't mean knowing how to code well or fast. AI is the answer here. A good AI doesn't care what language you want something written in. As long as it's in its training, or it can look it up, it will write code that is often more correct than what a human could do. Not necessarily better. But working and following all the rules. And in sticking to small, discrete Jobs, it doesn't need to be super-efficient.
+
+The final concept was ultra secure. At the start the interfaces were just stubbed. But those stubs were part of the architecture and treated just like any other Job. The contract was built first and not changed. After the application was going, it was child's play to add the actual code that handles security.
+
+The bonus was observability. The security geeks better be salivating at this. Normally, for communication inside an application, you have to rely on coders to put log statements at various places. Not now. While this doesn't provide the level of visibility you may fantasize of having, you now have observability on all traffic between different Jobs. All secure with mTLS, but visible with the right key. What Claude and I built was authenticated, encrypted, observable inter-service traffic.
+
+Those are what I went into this project with. Like the last one, joined at the hip with Claude.ai. It started with concepting things out, picking the initial languages, and then jumping right in. In less than 40 hours we produced what you see here. A working prototype. Mind you, I'm calling this "project-complete" and not "feature-complete" but only because features like multi-player and multi-table weren't implemented. They weren't needed for what this project's focus was:
+
+*Tessellated Constellation Architecture: Human and AI working together to make the visions of giants a reality.*
 
 ---
 
