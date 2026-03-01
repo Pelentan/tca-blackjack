@@ -198,8 +198,8 @@
         <div class="svc java">
           <div class="svc-name">Bank Service</div>
           <div class="svc-lang">Java</div>
-          <div class="svc-desc">Player finances. BigDecimal arithmetic — no floats near money. Completely isolated database. Re-validates Redis session on every financial operation regardless of JWT.</div>
-          <span class="tag tag-java">Java</span>
+          <div class="svc-desc">Player finances. Fixed-point arithmetic in GnuCOBOL — no floats near money. Go provides the REST API and PostgreSQL layer. Completely isolated database. Re-validates Redis session on every financial operation regardless of JWT.</div>
+          <span class="tag tag-java">COBOL + Go</span>
         </div>
       </div>
     </div>
@@ -228,9 +228,9 @@
       </div>
       <div class="svc py">
         <div class="svc-name">Email Service</div>
-        <div class="svc-lang">Python · STUB</div>
-        <div class="svc-desc">Account verification and magic links only. Stubbed for now — logs to console. Swap in real SMTP/SendGrid with zero upstream changes.</div>
-        <span class="tag tag-stub">STUB</span>
+        <div class="svc-lang">Python</div>
+        <div class="svc-desc">Account verification and magic links. Real SMTP delivery via containerized Postfix — Gmail relay for local dev, direct MX for production infrastructure. Swap transport with zero upstream changes.</div>
+        <span class="tag tag-py">Python</span>
       </div>
     </div>
   </div>
@@ -261,7 +261,7 @@
   <div class="layer infra">
     <div class="layer-label">Infrastructure</div>
     <div style="font-size:0.72rem;opacity:0.8;line-height:1.8;">
-      <strong>Now:</strong> Docker Compose · Single host · mTLS via self-signed certs per container · All services on isolated bridge network<br>
+      <strong>Now:</strong> Docker Compose · Single host · mTLS via ephemeral PKI (cert-init generates CA + per-service certs at startup) · Per-domain network isolation (9 bridge networks) · Real email via Postfix<br>
       <strong>K8s-ready:</strong> Each service is a deployable unit · OPA as sidecar policy engine · Horizontal scaling by service · Network policies map 1:1 from Compose
     </div>
   </div>
@@ -274,7 +274,7 @@
       <div class="legend-item"><div class="legend-dot" style="background:#a855f7;"></div> Haskell — pure functions, provable correctness</div>
       <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9;"></div> TypeScript — auth ecosystem, type safety</div>
       <div class="legend-item"><div class="legend-dot" style="background:#84cc16;"></div> Python — ML upgrade path, fast iteration</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> Java — financial precision, BigDecimal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> COBOL + Go — financial arithmetic in COBOL, REST API in Go</div>
       <div class="legend-item"><div class="legend-dot" style="background:#e879f9;"></div> Elixir — concurrent messaging, fault isolation</div>
     </div>
   </div>

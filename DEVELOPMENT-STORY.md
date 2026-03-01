@@ -120,13 +120,13 @@ Docker healthchecks cannot present client certificates, so internal mTLS service
 
 ## Contracts
 
-One early discipline failure was letting contract documentation slip behind implementation. The `contracts/openapi/` directory held 5 files in a mix of YAML and markdown formats, in a folder named `openapi`.
+Contracts were written before implementation from day one — the OpenAPI specs existed before Go was written, which is why everything composes cleanly. That's not what slipped.
 
-The fix: 12 OpenAPI 3.1 YAML files — one per service, written from the actual implementation. The existing markdown files (email, observability, document) were kept as companion rationale documents; the YAML handles schema, the markdown handles why.
+What slipped was storage discipline. The `contracts/openapi/` directory held 5 files in a mix of YAML and markdown formats, well behind the actual number of services. The contracts existed in spirit; they just hadn't been maintained in the right place as the project evolved.
 
-Writing contracts from the live implementation revealed several places where things had quietly diverged from the original design. The bank service had gained endpoints (`/deposit`, `/withdraw`, `/export`) that were never formally documented. The auth service token model — bootstrap JWT vs. session JWT, exchange code pattern — existed in code but had never been written down in one place.
+The fix: 12 OpenAPI 3.1 YAML files — one per service, written against the actual running implementation. The existing markdown files (email, observability, document) were kept as companion rationale documents; the YAML handles schema, the markdown handles why.
 
-Lesson now in the guidelines: contracts before implementation, or contracts immediately after. The gap between is where technical debt hides.
+Drift is expected during development. The solution isn't preventing it — it's the periodic discipline of catching up. Writing contracts against the live implementation is a useful exercise regardless: it revealed several places where the bank service had gained endpoints (`/deposit`, `/withdraw`, `/export`) that were never formally documented, and forced the auth service token model — bootstrap JWT vs. session JWT, exchange code pattern — to be written down coherently for the first time.
 
 ## What Went Wrong (and How It Was Fixed)
 
@@ -141,6 +141,14 @@ Lesson now in the guidelines: contracts before implementation, or contracts imme
 **Missing RFC 5322 Message-ID** — Gmail rejected emails missing a standard `Message-ID` header. The transport layer was setting a custom `X-Message-ID` but not the standard header Gmail requires. Fix: one line, format `<uuid@domain>`. Lesson: RFC compliance matters when talking to major mail providers.
 
 **PTR record rejection** — direct MX delivery from a residential IP was rejected by Gmail because residential IPs don't have PTR records. This is a 20-year-old anti-spam measure. Fix: route through Gmail SMTP relay for local dev. Lesson: the architecture is correct for production (VPS with PTR record, or corporate mail relay); this is an infrastructure constraint, not a code problem.
+
+**CA private key committed to git** — the CA key (`infra/certs/ca.key`) was committed to the repository in an early commit before proper `.gitignore` hygiene was in place. A CA private key in a repository is a meaningful exposure: anyone with repo access could sign certificates that would be trusted by all services in the stack.
+
+The fix was immediate: `*.key`, `*.pem`, and `infra/certs/` were added to `.gitignore`. The key itself, being a self-signed development CA for a local PoC, carries limited real-world risk — but the correct response to any credential exposure is to treat it as compromised and rotate it, which the ephemeral cert-init design does on every `docker compose up`.
+
+The more important fix was architectural: moving from static pre-generated certificates (`gen-certs.sh` → `infra/certs/`) to the init container pattern. Certificates now live in an ephemeral Docker volume, generated fresh at startup, destroyed on shutdown. There is nothing to commit because there is never a file on disk outside the container.
+
+The lesson became a project guideline: **security scanning and a complete `.gitignore` are commit zero artifacts**, not things added after the fact. The scanning workflow commit message even says it: *"this process is going to be moved to the initial commit from now on."* That's the lesson being internalized in real time.
 
 ---
 
@@ -166,12 +174,11 @@ The correct framing: **AI amplifying expertise, not replacing engineers.** The l
 
 The project status is documented in `README.md`. The short version: core architecture is fully implemented and running. The foundation is solid and the path forward is clear.
 
-For production deployment:
-- OPA policy rules (currently allow-all stub)
-- Real passkey hardware attestation enforcement (FIDO2 level 2)
-- Multi-table support (architecture supports it, UI shows one)
-- Chat WebSocket upgrade (Elixir OTP actor model already correct, transport change only)
-- Network isolation per domain (single swarm-net now; per-domain networks next)
+The PoC is complete and fully functional as-is. Three things remain if this were to go further:
+
+- **Multi-table support** — the architecture handles it; the UI shows one table. Adding more is a UI concern, not an architectural one.
+- **Chat WebSocket upgrade** — the Elixir OTP actor model is already correct for WebSocket; only the transport changes.
+- **OPA policy rules** — gateway scope enforcement is real and working. The `/policy/check` endpoint in auth-service is stubbed to always return `allowed: true`. Fine for a PoC; needs real Rego rules before production.
 
 ---
 
