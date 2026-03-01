@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swarm Blackjack - Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; }
+  h1 { text-align: center; font-size: 1.4rem; color: #58a6ff; margin-bottom: 6px; letter-spacing: 2px; text-transform: uppercase; }
+  .subtitle { text-align: center; font-size: 0.75rem; color: #8b949e; margin-bottom: 28px; letter-spacing: 1px; }
+
+  .arch { display: grid; gap: 16px; }
+
+  /* Layers */
+  .layer { border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; }
+  .layer-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; color: #8b949e; margin-bottom: 10px; }
+
+  .services { display: flex; flex-wrap: wrap; gap: 10px; }
+
+  .svc {
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 0.78rem;
+    flex: 1;
+    min-width: 130px;
+    position: relative;
+  }
+  .svc-name { font-weight: 600; margin-bottom: 3px; }
+  .svc-lang { font-size: 0.65rem; opacity: 0.75; margin-bottom: 4px; }
+  .svc-desc { font-size: 0.68rem; opacity: 0.6; line-height: 1.4; }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-top: 5px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  /* Color themes per service */
+  .go    { background: #0d2137; border: 1px solid #1f6feb; }
+  .ts    { background: #0d1f2d; border: 1px solid #0ea5e9; }
+  .py    { background: #1a1f0d; border: 1px solid #84cc16; }
+  .java  { background: #1f0d0d; border: 1px solid #ef4444; }
+  .hs    { background: #1a0d2e; border: 1px solid #a855f7; }
+  .ex    { background: #1a0d1a; border: 1px solid #e879f9; }
+  .pg    { background: #0d1a2e; border: 1px solid #0284c7; }
+  .redis { background: #1f0d0d; border: 1px solid #dc2626; }
+  .infra { background: #0d1a0d; border: 1px solid #16a34a; }
+
+  .tag-go    { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb; }
+  .tag-ts    { background: #0ea5e933; color: #38bdf8; border: 1px solid #0ea5e9; }
+  .tag-py    { background: #84cc1633; color: #a3e635; border: 1px solid #84cc16; }
+  .tag-java  { background: #ef444433; color: #fca5a5; border: 1px solid #ef4444; }
+  .tag-hs    { background: #a855f733; color: #d8b4fe; border: 1px solid #a855f7; }
+  .tag-ex    { background: #e879f933; color: #f0abfc; border: 1px solid #e879f9; }
+  .tag-stub  { background: #37415133; color: #9ca3af; border: 1px solid #6b7280; }
+
+  /* Auth boundary */
+  .boundary {
+    border: 1px dashed #f59e0b;
+    border-radius: 8px;
+    padding: 10px;
+    position: relative;
+    margin-top: 4px;
+  }
+  .boundary-label {
+    position: absolute;
+    top: -9px;
+    left: 12px;
+    background: #0d1117;
+    padding: 0 6px;
+    font-size: 0.62rem;
+    color: #f59e0b;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Trust lines */
+  .trust-row { display: flex; gap: 10px; align-items: stretch; margin-top: 8px; }
+  .trust-box {
+    flex: 1;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.7rem;
+  }
+  .trust-user { background: #1f1a0d; border: 1px solid #f59e0b; }
+  .trust-svc  { background: #0d1a1a; border: 1px solid #06b6d4; }
+  .trust-title { font-weight: 600; margin-bottom: 3px; font-size: 0.68rem; }
+  .trust-user .trust-title { color: #f59e0b; }
+  .trust-svc  .trust-title { color: #06b6d4; }
+  .trust-body { opacity: 0.7; line-height: 1.4; font-size: 0.66rem; }
+
+  hr { border: none; border-top: 1px solid #21262d; margin: 4px 0; }
+
+  .arrow { text-align: center; color: #6e7681; font-size: 1.1rem; margin: 2px 0; }
+
+  .db-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .db-box { flex: 1; min-width: 180px; border-radius: 6px; padding: 10px 14px; font-size: 0.75rem; }
+  .db-name { font-weight: 600; margin-bottom: 2px; }
+  .db-note { font-size: 0.65rem; opacity: 0.6; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.65rem; color: #8b949e; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<h1>Swarm Blackjack</h1>
+<div class="subtitle">Proof-of-Concept · Polyglot Microservices · Zero Trust Posture</div>
+
+<div class="arch">
+
+  <!-- CLIENT TIER -->
+  <div class="layer">
+    <div class="layer-label">Client Tier</div>
+    <div class="services">
+      <div class="svc ts" style="max-width:220px;">
+        <div class="svc-name">Game UI</div>
+        <div class="svc-lang">React + TypeScript</div>
+        <div class="svc-desc">Browser-first. Component architecture portable to Electron desktop with zero changes to business logic.</div>
+        <span class="tag tag-ts">TypeScript</span>
+      </div>
+      <div class="svc ts" style="max-width:220px;">
+        <div class="svc-name">Observability Dashboard</div>
+        <div class="svc-lang">React + TypeScript</div>
+        <div class="svc-desc">Live visualization of swarm activity. Shows which container handled each operation in real-time.</div>
+        <span class="tag tag-ts">TypeScript</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">↕ HTTPS</div>
+
+  <!-- GATEWAY -->
+  <div class="layer">
+    <div class="layer-label">Gateway Tier</div>
+    <div class="services">
+      <div class="svc go">
+        <div class="svc-name">API Gateway</div>
+        <div class="svc-lang">Go</div>
+        <div class="svc-desc">Single entry point. TLS termination, request routing, rate limiting. All user traffic enters here — nothing else is externally exposed.</div>
+        <span class="tag tag-go">Go</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">↕ mTLS (internal)</div>
+
+  <!-- GAME DOMAIN -->
+  <div class="layer">
+    <div class="layer-label">Game Domain</div>
+    <div class="services">
+      <div class="svc go">
+        <div class="svc-name">Game State</div>
+        <div class="svc-lang">Go</div>
+        <div class="svc-desc">Orchestrates game flow. State machine for round lifecycle. Coordinates all game-domain services.</div>
+        <span class="tag tag-go">Go</span>
+      </div>
+      <div class="svc go">
+        <div class="svc-name">Deck Service</div>
+        <div class="svc-lang">Go</div>
+        <div class="svc-desc">Owns the shoe. Shuffle, cut, deal. Stateful per-table. Speed matters at scale.</div>
+        <span class="tag tag-go">Go</span>
+      </div>
+      <div class="svc hs">
+        <div class="svc-name">Hand Evaluator</div>
+        <div class="svc-lang">Haskell</div>
+        <div class="svc-desc">Pure function. Cards in → value out. Soft/hard totals, bust detection, blackjack. Immutable, deterministic, provably correct.</div>
+        <span class="tag tag-hs">Haskell</span>
+      </div>
+      <div class="svc py">
+        <div class="svc-name">Dealer AI</div>
+        <div class="svc-lang">Python</div>
+        <div class="svc-desc">Rule-based strategy engine now. Architecture leaves ML upgrade path open with zero service contract changes.</div>
+        <span class="tag tag-py">Python</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECURITY/FINANCIAL DOMAIN -->
+  <div class="layer">
+    <div class="layer-label">Security &amp; Financial Domain</div>
+
+    <div class="boundary">
+      <div class="boundary-label">Zero Trust Boundary · All user requests verified here</div>
+      <div class="services">
+        <div class="svc ts">
+          <div class="svc-name">Auth Service + OPA</div>
+          <div class="svc-lang">TypeScript · Open Policy Agent</div>
+          <div class="svc-desc">Passkeys primary. TOTP fallback. Magic link for account creation only. Issues short-lived JWTs. Hosts policy engine — every user action asks "is this allowed?"</div>
+          <span class="tag tag-ts">TypeScript</span>
+        </div>
+        <div class="svc java">
+          <div class="svc-name">Bank Service</div>
+          <div class="svc-lang">Java</div>
+          <div class="svc-desc">Player finances. BigDecimal arithmetic — no floats near money. Completely isolated database. Re-validates Redis session on every financial operation regardless of JWT.</div>
+          <span class="tag tag-java">Java</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trust-row">
+      <div class="trust-box trust-user">
+        <div class="trust-title">User → Service (Trust Boundary)</div>
+        <div class="trust-body">Auth/OPA policy check on every request. JWT (15min) + Redis refresh token. Bank operations additionally re-validate session directly.</div>
+      </div>
+      <div class="trust-box trust-svc">
+        <div class="trust-title">Service → Service (Internal)</div>
+        <div class="trust-body">Mutual TLS on isolated Docker network. Verified identity, encrypted transit. No policy overhead — "shake hands without gloves."</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMUNICATION DOMAIN -->
+  <div class="layer">
+    <div class="layer-label">Communication Domain</div>
+    <div class="services">
+      <div class="svc ex">
+        <div class="svc-name">Chat Service</div>
+        <div class="svc-lang">Elixir · OTP</div>
+        <div class="svc-desc">E2E encrypted. Public table chat + targeted private messages. OTP supervision trees — a crashed process restarts in isolation, never takes down the game. Built for this exact problem (see: WhatsApp).</div>
+        <span class="tag tag-ex">Elixir</span>
+      </div>
+      <div class="svc py">
+        <div class="svc-name">Email Service</div>
+        <div class="svc-lang">Python · STUB</div>
+        <div class="svc-desc">Account verification and magic links only. Stubbed for now — logs to console. Swap in real SMTP/SendGrid with zero upstream changes.</div>
+        <span class="tag tag-stub">STUB</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA TIER -->
+  <div class="layer">
+    <div class="layer-label">Data Tier</div>
+    <div class="db-row">
+      <div class="db-box pg">
+        <div class="db-name">🗄 Game History DB</div>
+        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">PostgreSQL</div>
+        <div class="db-note">All game state, hand history, session data. Accessible to Game domain services.</div>
+      </div>
+      <div class="db-box pg">
+        <div class="db-name">🗄 Bank DB</div>
+        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">PostgreSQL · Isolated</div>
+        <div class="db-note">Player finances only. Completely separate instance. Bank Service is the only service with credentials.</div>
+      </div>
+      <div class="db-box redis">
+        <div class="db-name">⚡ Session Store</div>
+        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">Redis</div>
+        <div class="db-note">Refresh tokens, fast auth validation, rate limiting state. Instant revocation — "sign out everywhere" works.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INFRA -->
+  <div class="layer infra">
+    <div class="layer-label">Infrastructure</div>
+    <div style="font-size:0.72rem;opacity:0.8;line-height:1.8;">
+      <strong>Now:</strong> Docker Compose · Single host · mTLS via self-signed certs per container · All services on isolated bridge network<br>
+      <strong>K8s-ready:</strong> Each service is a deployable unit · OPA as sidecar policy engine · Horizontal scaling by service · Network policies map 1:1 from Compose
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="layer">
+    <div class="layer-label">Language Rationale</div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb;"></div> Go — throughput, concurrency, HTTP</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a855f7;"></div> Haskell — pure functions, provable correctness</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9;"></div> TypeScript — auth ecosystem, type safety</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#84cc16;"></div> Python — ML upgrade path, fast iteration</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> Java — financial precision, BigDecimal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e879f9;"></div> Elixir — concurrent messaging, fault isolation</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
