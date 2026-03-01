@@ -1,4 +1,4 @@
-# Swarm Blackjack — Development Story
+# TCA Blackjack — Development Story
 
 **A case study in AI-augmented software development**
 
@@ -6,7 +6,7 @@
 
 ## What This Is
 
-Swarm Blackjack is a proof-of-concept polyglot microservices architecture built to answer a specific question: *Can a single experienced engineer, working with an AI partner, produce the kind of sophisticated distributed system that would normally require a large team?*
+TCA Blackjack is a proof-of-concept polyglot microservices architecture built to answer a specific question: *Can a single experienced engineer, working with an AI partner, produce the kind of sophisticated distributed system that would normally require a large team?*
 
 The answer, documented here, is yes — with important nuance about what that actually means.
 
@@ -184,7 +184,7 @@ The PoC is complete and fully functional as-is. Three things remain if this were
 
 ## Using This as a Reference
 
-If you're evaluating this codebase: read the architecture diagram (`infra/swarm-architecture.html`), then pick any service and read its contract document. The contracts tell you what each service does and why. The implementations show how. The git history shows the progression.
+If you're evaluating this codebase: read the architecture diagram (`infra/tca-architecture.html`), then pick any service and read its contract document. The contracts tell you what each service does and why. The implementations show how. The git history shows the progression.
 
 If you have questions about specific decisions — why a particular language, why a particular security pattern, why something was done a certain way — those questions have real answers. Nothing here was chosen arbitrarily.
 

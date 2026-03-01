@@ -7,7 +7,7 @@ import { EnrollmentModal } from './components/EnrollmentModal';
 import { TransactionModal } from './components/TransactionModal';
 import { SessionHistoryDrawer } from './components/SessionHistoryDrawer';
 
-const SESSION_KEY = 'swarm_session';
+const SESSION_KEY = 'tca_session';
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || '';
 
 interface Session {
@@ -243,7 +243,7 @@ function App() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', color: '#58a6ff', letterSpacing: 2, textTransform: 'uppercase' }}>
-            Swarm Blackjack
+            TCA Blackjack
           </h1>
           <div style={{ fontSize: '0.65rem', color: '#8b949e', letterSpacing: 1 }}>
             Polyglot Microservices · Zero Trust · PoC

@@ -1,7 +1,7 @@
 {
   "name": "auth-service",
   "version": "0.3.0",
-  "description": "Swarm Blackjack — Auth Service (TypeScript)",
+  "description": "TCA Blackjack — Auth Service (TypeScript)",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

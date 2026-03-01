@@ -1,3 +1,3 @@
-module github.com/swarm-blackjack/game-state
+module github.com/tca-blackjack/game-state
 
 go 1.22

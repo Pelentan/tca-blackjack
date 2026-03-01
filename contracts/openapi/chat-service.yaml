@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Chat Service
+  title: TCA Blackjack - Chat Service
   description: |
     Table chat over REST. Built in Elixir/OTP — each table's message history
     is owned by a supervised GenServer process in the TableRegistry.

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Auth Service
+  title: TCA Blackjack - Auth Service
   description: |
     Identity, passkey authentication, and session management.
     TypeScript/Node.js with SimpleWebAuthn v10.

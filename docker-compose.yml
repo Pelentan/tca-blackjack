@@ -1,4 +1,4 @@
-# ── Swarm Blackjack — Docker Compose ─────────────────────────────────────────
+# ── TCA Blackjack (Tessellated Constellation Architecture) — Docker Compose ────
 #
 # Network isolation model — each network represents a trust boundary:
 #
@@ -24,6 +24,8 @@
 # Start:  docker compose up --build
 # Stop:   docker compose down
 # Logs:   docker compose logs -f [service-name]
+
+name: tca-blackjack
 
 networks:
   frontend-net:
@@ -61,7 +63,7 @@ services:
   # filesystem or any image layer.
   cert-init:
     build: ./cert-init
-    container_name: swarm-cert-init
+    container_name: tca-cert-init
     volumes:
       - mtls-certs:/certs
     restart: "no"  # Init container — run once and exit
@@ -71,7 +73,7 @@ services:
   # The only service with cross-domain visibility by design.
   gateway:
     build: ./gateway
-    container_name: swarm-gateway
+    container_name: tca-gateway
     ports:
       - "8021:8021"
     environment:
@@ -121,7 +123,7 @@ services:
   # Nothing outside game-net can reach deck, hand-evaluator, or dealer-ai.
   game-state:
     build: ./game-state
-    container_name: swarm-game-state
+    container_name: tca-game-state
     environment:
       PORT: "3001"
       DECK_SERVICE_URL: "https://deck-service:3002"
@@ -157,7 +159,7 @@ services:
 
   deck-service:
     build: ./deck-service
-    container_name: swarm-deck-service
+    container_name: tca-deck-service
     environment:
       PORT: "3002"
       TLS_CERT: "/certs/deck-service.crt"
@@ -175,7 +177,7 @@ services:
 
   hand-evaluator:
     build: ./hand-evaluator
-    container_name: swarm-hand-evaluator
+    container_name: tca-hand-evaluator
     environment:
       PORT: "3003"
       TLS_CERT: "/certs/hand-evaluator.crt"
@@ -194,7 +196,7 @@ services:
 
   dealer-ai:
     build: ./dealer-ai
-    container_name: swarm-dealer-ai
+    container_name: tca-dealer-ai
     environment:
       PORT: "3004"
       TLS_CERT: "/certs/dealer-ai.crt"
@@ -215,13 +217,13 @@ services:
   # auth-db is on auth-net only — same guarantee.
   auth-service:
     build: ./auth-service
-    container_name: swarm-auth
+    container_name: tca-auth
     env_file:
       - auth.env
     environment:
       PORT: "3006"
       REDIS_URL: "redis://redis:6379"
-      JWT_SECRET: "swarm-blackjack-dev-secret-change-in-production"
+      JWT_SECRET: "tca-blackjack-dev-secret-change-in-production"
       EMAIL_URL: "http://email-service:3008"
       DOCUMENT_URL: "http://document-service:3011"
       BANK_URL: "https://bank-service:3005"
@@ -254,7 +256,7 @@ services:
 
   auth-ui-service:
     build: ./auth-ui-service
-    container_name: swarm-auth-ui
+    container_name: tca-auth-ui
     environment:
       PORT: "3010"
       AUTH_SERVICE_URL: "https://auth-service:3006"
@@ -279,7 +281,7 @@ services:
 
   bank-service:
     build: ./bank-service
-    container_name: swarm-bank
+    container_name: tca-bank
     env_file:
       - bank.env
     environment:
@@ -303,7 +305,7 @@ services:
 
   document-service:
     build: ./document-service
-    container_name: swarm-document
+    container_name: tca-document
     environment:
       PORT: "3011"
     networks:
@@ -318,7 +320,7 @@ services:
   # ── Communication Domain ────────────────────────────────────────────────────
   chat-service:
     build: ./chat-service
-    container_name: swarm-chat
+    container_name: tca-chat
     environment:
       PORT: "3007"
       TLS_CERT: "/certs/chat-service.crt"
@@ -336,7 +338,7 @@ services:
 
   email-service:
     build: ./email-service
-    container_name: swarm-email
+    container_name: tca-email
     environment:
       PORT: "3008"
       SMTP_HOST: "postfix"
@@ -364,10 +366,10 @@ services:
   # No other service can attempt SMTP delivery.
   postfix:
     build: ./postfix
-    container_name: swarm-postfix
+    container_name: tca-postfix
     environment:
-      MAIL_HOSTNAME: "swarm-blackjack.local"
-      MAIL_FROM_DOMAIN: "swarm-blackjack.local"
+      MAIL_HOSTNAME: "tca-blackjack.local"
+      MAIL_FROM_DOMAIN: "tca-blackjack.local"
       SMTP_RELAY_HOST: "${SMTP_RELAY_HOST}"
       SMTP_RELAY_PORT: "${SMTP_RELAY_PORT}"
       SMTP_USER: "${SMTP_USER}"
@@ -385,7 +387,7 @@ services:
       context: ./ui
       args:
         VITE_GATEWAY_URL: ""
-    container_name: swarm-ui
+    container_name: tca-ui
     networks:
       - frontend-net  # gateway only — no internal service access
     depends_on:
@@ -395,7 +397,7 @@ services:
   # ── Data Tier ──────────────────────────────────────────────────────────────
   game-db:
     image: postgres:16-alpine
-    container_name: swarm-game-db
+    container_name: tca-game-db
     environment:
       POSTGRES_DB: gamedb
       POSTGRES_USER: gameuser
@@ -408,7 +410,7 @@ services:
 
   bank-db:
     image: postgres:16-alpine
-    container_name: swarm-bank-db
+    container_name: tca-bank-db
     environment:
       POSTGRES_DB: bankdb
       POSTGRES_USER: bankuser
@@ -422,7 +424,7 @@ services:
 
   auth-db:
     image: postgres:16-alpine
-    container_name: swarm-auth-db
+    container_name: tca-auth-db
     environment:
       POSTGRES_DB: authdb
       POSTGRES_USER: authuser
@@ -436,7 +438,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: swarm-redis
+    container_name: tca-redis
     command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
@@ -447,7 +449,7 @@ services:
   # ── Observability ──────────────────────────────────────────────────────────
   observability-service:
     build: ./observability-service
-    container_name: swarm-observability
+    container_name: tca-observability
     environment:
       PORT: "3009"
       REDIS_URL: "redis:6379"

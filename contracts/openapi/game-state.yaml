@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Game State Service
+  title: TCA Blackjack - Game State Service
   description: |
     Orchestrates game flow. State machine for the round lifecycle.
     Coordinates deck-service, hand-evaluator, and dealer-ai.

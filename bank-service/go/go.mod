@@ -1,4 +1,4 @@
-module github.com/swarm-blackjack/bank-service
+module github.com/tca-blackjack/bank-service
 
 go 1.22
 

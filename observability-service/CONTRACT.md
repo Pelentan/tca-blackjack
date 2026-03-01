@@ -108,7 +108,7 @@ into the dashboard.
 
 ## Published Event Shape (Redis → Gateway → Browser)
 
-After filtering, events are published to Redis channel `swarm:events`
+After filtering, events are published to Redis channel `tca:events`
 as JSON. This is the shape the gateway already consumes:
 
 ```json
@@ -198,7 +198,7 @@ Gateway currently builds its own ObservabilityBus from proxy traffic.
 After this change:
 
 1. Gateway proxy calls still publish to the local bus (gateway → downstream events)
-2. Gateway also subscribes to Redis `swarm:events` channel
+2. Gateway also subscribes to Redis `tca:events` channel
 3. Redis events are fed into the same local bus
 4. SSE handler unchanged — still fans out from the local bus
 
@@ -212,18 +212,18 @@ through the same SSE stream.
 ```yaml
 observability-service:
   build: ./observability-service
-  container_name: swarm-observability
+  container_name: tca-observability
   environment:
     PORT: "3009"
     REDIS_URL: "redis:6379"
   networks:
-    - swarm-net
+    - tca-net
   # Not exposed externally — internal only
   depends_on:
     - redis
 ```
 
-No external port exposure. Only reachable by other services on swarm-net.
+No external port exposure. Only reachable by other services on tca-net.
 
 ---
 

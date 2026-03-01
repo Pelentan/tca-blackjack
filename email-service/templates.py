@@ -149,7 +149,7 @@ def _html_wrap(title: str, body_inner: str) -> str:
                      padding:28px 32px;text-align:center;border-bottom:1px solid #30363d;">
             <div style="color:#58a6ff;font-size:22px;font-weight:700;
                         letter-spacing:3px;text-transform:uppercase;">
-              Swarm Blackjack
+              TCA Blackjack
             </div>
             <div style="color:#8b949e;font-size:12px;margin-top:4px;letter-spacing:1px;">
               Polyglot Microservices · Zero Trust · PoC
@@ -166,7 +166,7 @@ def _html_wrap(title: str, body_inner: str) -> str:
         <tr>
           <td style="padding:16px 32px 24px;border-top:1px solid #21262d;text-align:center;">
             <div style="color:#4a5568;font-size:11px;">
-              This is an automated message from Swarm Blackjack.
+              This is an automated message from TCA Blackjack.
               If you didn't request this, you can safely ignore it.
             </div>
           </td>
@@ -190,7 +190,7 @@ def _render_verify_email(p: dict) -> tuple[str, str, str | None]:
         f"Note: This is a one-time verification link. "
         f"Future logins use your registered email — no passwords."
     )
-    html = _html_wrap("Verify your Swarm Blackjack account", f"""
+    html = _html_wrap("Verify your TCA Blackjack account", f"""
         <h2 style="color:#e6edf3;margin:0 0 16px;font-size:20px;">Verify your email</h2>
         <p style="color:#8b949e;margin:0 0 24px;line-height:1.6;">
           Thanks for registering. Click the button below to verify your email address
@@ -212,7 +212,7 @@ def _render_verify_email(p: dict) -> tuple[str, str, str | None]:
           Or copy this URL: <span style="color:#58a6ff;">{url}</span>
         </p>
     """)
-    return "Verify your Swarm Blackjack account", text, html
+    return "Verify your TCA Blackjack account", text, html
 
 
 def _render_magic_link(p: dict) -> tuple[str, str, str | None]:
@@ -222,7 +222,7 @@ def _render_magic_link(p: dict) -> tuple[str, str, str | None]:
         f"{url}\n\n"
         f"This link expires in {p['expires_in']} and can only be used once."
     )
-    html = _html_wrap("Your Swarm Blackjack setup link", f"""
+    html = _html_wrap("Your TCA Blackjack setup link", f"""
         <h2 style="color:#e6edf3;margin:0 0 16px;font-size:20px;">Your setup link</h2>
         <p style="color:#8b949e;margin:0 0 24px;line-height:1.6;">
           Click the button below to complete your account setup.
@@ -240,7 +240,7 @@ def _render_magic_link(p: dict) -> tuple[str, str, str | None]:
           Expires in {p['expires_in']} · One-time use only
         </p>
     """)
-    return "Your Swarm Blackjack setup link", text, html
+    return "Your TCA Blackjack setup link", text, html
 
 
 def _render_password_reset(p: dict) -> tuple[str, str, str | None]:
@@ -291,7 +291,7 @@ def _render_session_summary(p: dict) -> tuple[str, str, str | None]:
 def _render_account_flag_notice(p: dict) -> tuple[str, str, str | None]:
     return (
         "Important notice regarding your account",
-        f"An action has been taken on your Swarm Blackjack account.\n\n"
+        f"An action has been taken on your TCA Blackjack account.\n\n"
         f"Reason      : {p['reason']}\n"
         f"Action taken: {p['action_taken']}\n\n"
         f"If you believe this is in error, please contact support.",

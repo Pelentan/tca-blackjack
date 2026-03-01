@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Auth UI Service
+  title: TCA Blackjack - Auth UI Service
   description: |
     Browser-facing authentication orchestrator. Owns the auth modal flow.
     Written in Go, deployed as a scratch container (static binary, no shell).

@@ -4,7 +4,7 @@
 // Container: Scratch (static binary, no shell, no attack surface)
 //
 // Receives event reports from all services, filters sensitive data,
-// publishes to Redis pub/sub channel "swarm:events".
+// publishes to Redis pub/sub channel "tca:events".
 // Gateway subscribes to Redis and fans out to SSE clients.
 //
 // No service needs to know Redis exists.
@@ -107,7 +107,7 @@ var (
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
 
-const redisChannel = "swarm:events"
+const redisChannel = "tca:events"
 
 var rdb *redis.Client
 

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Dealer AI
+  title: TCA Blackjack - Dealer AI
   description: |
     Rule-based dealer strategy engine. Implements standard casino dealer rules:
     stand on hard 17+, hit on soft 17 (house rule), hit on 16 and below.

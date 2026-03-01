@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Hand Evaluator
+  title: TCA Blackjack - Hand Evaluator
   description: |
     Pure function service. Cards in → hand value out.
     No state, no side effects, no database. The HTTP layer is the only impure
@@ -13,7 +13,7 @@ info:
     Internal service — mTLS only, not externally exposed.
   version: 0.1.0
   contact:
-    name: Swarm Blackjack PoC
+    name: TCA Blackjack PoC
 
 servers:
   - url: http://hand-evaluator:3003

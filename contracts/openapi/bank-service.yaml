@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Bank Service
+  title: TCA Blackjack - Bank Service
   description: |
     Player financial ledger. All arithmetic validated by GnuCOBOL programs —
     the Go layer handles HTTP and database I/O; COBOL handles the math.
@@ -17,7 +17,7 @@ info:
 
     Completely isolated database (bank-db). No other service has credentials.
     Re-validates session on every financial operation regardless of JWT state.
-    Balance updates published to Redis (swarm:balance) for real-time UI.
+    Balance updates published to Redis (tca:balance) for real-time UI.
 
     Internal service — mTLS only, not externally exposed. All external access
     proxied through the API Gateway with session scope enforcement.

@@ -1,13 +1,13 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - API Gateway
+  title: TCA Blackjack - API Gateway
   description: |
     Single external entry point for all client traffic.
     TLS termination, JWT validation, request routing, rate limiting.
     Nothing else is externally exposed.
   version: 0.1.0
   contact:
-    name: Swarm Blackjack PoC
+    name: TCA Blackjack PoC
 
 servers:
   - url: http://localhost:8080
@@ -23,7 +23,7 @@ tags:
   - name: bank
     description: Financial operations (proxied to bank-service)
   - name: observability
-    description: Live swarm activity feed
+    description: Live TCA activity feed
 
 paths:
   /health:
@@ -177,10 +177,10 @@ paths:
 
   /events:
     get:
-      summary: Observability SSE feed — live swarm activity
+      summary: Observability SSE feed — live TCA activity
       description: |
         SSE stream of all inter-service calls, routed through the gateway.
-        Used by the Observability Dashboard to visualize swarm activity.
+        Used by the Observability Dashboard to visualize TCA activity.
         Shows service name, endpoint, latency, and response status for every call.
       tags: [observability]
       responses:

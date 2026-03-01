@@ -1,8 +1,8 @@
-# Swarm Blackjack
+# TCA Blackjack
 
 **Proof-of-Concept: Polyglot Microservices · Zero Trust · AI-Augmented Development**
 
-A fully functional blackjack application built to demonstrate modern swarm architecture — discrete services in isolated containers, each written in the best language for its job, communicating via REST and SSE, with a working Zero Trust authentication chain built on passkeys.
+A fully functional blackjack application built to demonstrate modern TCA architecture — discrete services in isolated containers, each written in the best language for its job, communicating via REST and SSE, with a working Zero Trust authentication chain built on passkeys.
 
 > *"AI amplifying expertise, not replacing engineers."*  
 > This codebase was architected and implemented through AI-augmented development. The architecture decisions, security design, and engineering judgment came from human expertise. The implementation was accelerated by an AI partner fluent in every language in the stack.
@@ -32,7 +32,7 @@ Browser → UI (React/TypeScript)
                → Redis                 ← pub/sub for internal service events
 ```
 
-See `infra/swarm-architecture.html` for the full visual diagram.
+See `infra/tca-architecture.html` for the full visual diagram.
 
 ---
 
@@ -71,7 +71,7 @@ Where Rust's primary value proposition is memory safety, this architecture addre
 
 ### Authentication — Passkeys Required
 
-Swarm Blackjack implements a **mandatory passkey enrollment** model. Passwords do not exist in this system.
+TCA Blackjack implements a **mandatory passkey enrollment** model. Passwords do not exist in this system.
 
 **The two-token bootstrap chain:**
 
@@ -202,7 +202,7 @@ The UI has a **⚠ Reset DB** button in the header. It wipes all player accounts
 
 1. **Game loop** (no auth required): SSE connection established, demo table cycles automatically through betting → dealing → player turn → dealer turn → payout. Every phase triggers calls to Deck (Go), Hand Evaluator (Haskell), Dealer AI (Python), Bank (COBOL+Go).
 
-2. **Observability panel** (drawer at the bottom of the screen): every inter-service call visible in real-time — caller, callee, protocol, latency, status. Container hostname on each game state update shows which instance handled it. Pull the drawer up to watch the swarm in action.
+2. **Observability panel** (drawer at the bottom of the screen): every inter-service call visible in real-time — caller, callee, protocol, latency, status. Container hostname on each game state update shows which instance handled it. Pull the drawer up to watch the constellation in action.
 
 3. **Auth flow** (Login / Register button): full passkey ceremony — register with email, verify via link, OS prompts for biometric/PIN, enrolled and signed in. Subsequent logins: one tap.
 
@@ -259,7 +259,7 @@ No architectural changes required for K8s. That was the point.
 | API Contracts | ✅ Complete | 12 OpenAPI 3.1 YAML files in contracts/openapi/ |
 | OPA Integration | ⚠️ Stub | Token scope enforced at gateway; OPA policy engine stubbed (always authorized) |
 | Multi-table | ⚠️ Pending | Architecture supports it, UI shows one table |
-| Network isolation | ⚠️ Pending | Single swarm-net now; per-domain networks next phase |
+| Network isolation | ⚠️ Pending | Single tca-net now; per-domain networks next phase |
 
 ---
 

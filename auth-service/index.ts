@@ -36,7 +36,7 @@ import type {
 const PORT    = parseInt(process.env.PORT ?? '3006');
 const SERVICE = 'auth-service';
 
-const JWT_SECRET     = process.env.JWT_SECRET ?? 'swarm-blackjack-dev-secret-change-in-production';
+const JWT_SECRET     = process.env.JWT_SECRET ?? 'tca-blackjack-dev-secret-change-in-production';
 const JWT_EXPIRES_IN = 3600; // 60 minutes — extended for demo sessions
 
 const REDIS_URL   = process.env.REDIS_URL   ?? 'redis://redis:6379';
@@ -83,7 +83,7 @@ const GATEWAY_URL = process.env.GATEWAY_URL ?? 'http://localhost:8021';
 const UI_URL      = process.env.UI_URL      ?? 'http://localhost:8021';
 
 // WebAuthn config — from auth.env, injected as K8s secret in production
-const RP_NAME = process.env.WEBAUTHN_RP_NAME ?? 'Swarm Blackjack';
+const RP_NAME = process.env.WEBAUTHN_RP_NAME ?? 'TCA Blackjack';
 const RP_ID   = process.env.WEBAUTHN_RP_ID   ?? 'localhost';
 const ORIGIN  = process.env.WEBAUTHN_ORIGIN  ?? 'http://localhost:8021';
 
@@ -257,7 +257,7 @@ async function consumeChallenge(
 // Never stored in localStorage — held in memory for ceremony duration only.
 function issueBootstrapJWT(player: Player): string {
   return jwt.sign(
-    { sub: player.id, email: player.email, name: player.name, scope: 'enroll', iss: 'swarm-blackjack' },
+    { sub: player.id, email: player.email, name: player.name, scope: 'enroll', iss: 'tca-blackjack' },
     JWT_SECRET,
     { expiresIn: 300 } // 5 minutes
   );
@@ -267,7 +267,7 @@ function issueBootstrapJWT(player: Player): string {
 // Issued only after passkey ceremony succeeds. Stored in localStorage.
 function issueSessionJWT(player: Player, sessionId: string): string {
   return jwt.sign(
-    { sub: player.id, email: player.email, name: player.name, scope: 'session', sessionId, iss: 'swarm-blackjack' },
+    { sub: player.id, email: player.email, name: player.name, scope: 'session', sessionId, iss: 'tca-blackjack' },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
@@ -774,11 +774,11 @@ const requestHandler = async (req: http.IncomingMessage, res: http.ServerRespons
     const token = jwt.sign(
       {
         sub:       DEMO_PLAYER_ID,
-        email:     'demo@swarm-blackjack.local',
+        email:     'demo@tca-blackjack.local',
         name:      'Player 1',
         scope:     'session',
         sessionId: 'demo-session',
-        iss:       'swarm-blackjack',
+        iss:       'tca-blackjack',
       },
       JWT_SECRET,
       { expiresIn: '24h' }
@@ -823,7 +823,7 @@ function errorPage(message: string, uiUrl: string): string {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Verification Error — Swarm Blackjack</title>
+  <title>Verification Error — TCA Blackjack</title>
   <style>
     body { background:#0d1117; color:#e6edf3; font-family:system-ui,sans-serif;
            display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }

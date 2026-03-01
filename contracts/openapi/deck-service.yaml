@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Deck Service
+  title: TCA Blackjack - Deck Service
   description: |
     Owns the shoe. Manages shuffle, cut, and deal operations.
     Stateful per-table — each table has its own shoe instance.

@@ -40,7 +40,7 @@ We design before we build. In this order:
 3. **Define stub behavior** — every stubbed service has a documented swap point (see Section 4)
 4. **Then implement**
 
-We learned this correctly in Swarm. Game state YAML, gateway YAML, and deck service YAML existed before a line of Go was written. The email and observability contracts were designed before those services were built. This is the pattern.
+We learned this correctly in TCA Blackjack. Game state YAML, gateway YAML, and deck service YAML existed before a line of Go was written. The email and observability contracts were designed before those services were built. This is the pattern.
 
 ---
 
@@ -156,7 +156,7 @@ Lessons added as we discover them. Most recent first.
 We discovered this reactively in the local AI machine conversation when the question "what should be in my .gitignore?" came up right before pushing to GitHub. That question should never happen mid-project. Both files are generated at project kickoff based on the agreed stack, before any code is written.
 
 **2026-02-25 — Service Contracts Before Implementation**  
-Validated in Swarm: writing the OpenAPI specs first forced clarity on what each service actually does. Ambiguities that would have caused mid-implementation pivots got resolved at the design stage instead.
+Validated in TCA Blackjack: writing the OpenAPI specs first forced clarity on what each service actually does. Ambiguities that would have caused mid-implementation pivots got resolved at the design stage instead.
 
 **2026-02-25 — Stub Contracts Are Real Contracts**  
 The email service being "stubbed" doesn't mean its interface is informal. The full request/response contract was designed and documented. When real SMTP goes in, no caller changes. That's the test of a good stub.

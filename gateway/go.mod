@@ -1,4 +1,4 @@
-module github.com/swarm-blackjack/gateway
+module github.com/tca-blackjack/gateway
 
 go 1.22
 

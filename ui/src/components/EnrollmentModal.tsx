@@ -77,7 +77,7 @@ export const EnrollmentModal: React.FC<Props> = ({
     } catch (e: any) {
       if (e.name === 'NotAllowedError') {
         // User cancelled or dismissed the browser dialog
-        setErrMsg('Passkey enrollment is required to use Swarm Blackjack. Please try again.');
+        setErrMsg('Passkey enrollment is required to use TCA Blackjack. Please try again.');
       } else {
         setErrMsg(e.message ?? 'Enrollment failed — please try again');
       }
@@ -131,7 +131,7 @@ export const EnrollmentModal: React.FC<Props> = ({
                 Why passkeys?
               </div>
               <div style={{ color: '#8b949e', fontSize: '0.78rem', lineHeight: 1.6 }}>
-                Swarm Blackjack uses passkeys instead of passwords — your device's biometric
+                TCA Blackjack uses passkeys instead of passwords — your device's biometric
                 (fingerprint, face, or PIN) is the key. No password to steal, no magic links to wait for.
                 Once registered, signing in takes one tap.
               </div>

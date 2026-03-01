@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Email Service
+  title: TCA Blackjack - Email Service
   description: |
     Tiered email delivery service with Auth/OPA policy enforcement.
     Python/Flask stub — logs to console, sends nothing. Real SMTP

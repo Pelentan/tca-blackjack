@@ -531,11 +531,11 @@ func balanceSSEHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// subscribeRedisBalance subscribes to swarm:balance and fans out to balanceBus.
+// subscribeRedisBalance subscribes to tca:balance and fans out to balanceBus.
 func subscribeRedisBalance(rdb *redis.Client) {
-	sub := rdb.Subscribe(context.Background(), "swarm:balance")
+	sub := rdb.Subscribe(context.Background(), "tca:balance")
 	defer sub.Close()
-	log.Printf("[gateway] subscribed to Redis channel swarm:balance")
+	log.Printf("[gateway] subscribed to Redis channel tca:balance")
 	for msg := range sub.Channel() {
 		var evt BalanceEvent
 		if err := json.Unmarshal([]byte(msg.Payload), &evt); err != nil {
@@ -573,10 +573,10 @@ func subscribeRedis() {
 	}
 	defer rdb.Close()
 
-	sub := rdb.Subscribe(context.Background(), "swarm:events")
+	sub := rdb.Subscribe(context.Background(), "tca:events")
 	defer sub.Close()
 
-	log.Printf("[gateway] subscribed to Redis channel swarm:events")
+	log.Printf("[gateway] subscribed to Redis channel tca:events")
 
 	ch := sub.Channel()
 	for msg := range ch {

@@ -186,7 +186,7 @@ function renderPDF(req: DocumentRequest): Promise<Buffer> {
     const doc = new PDFDocument({
       size: DEFAULTS.pageSize,
       margins: { top: 50, bottom: 60, left: 60, right: 60 },
-      info: { Title: req.title, Creator: 'Swarm Blackjack · document-service' },
+      info: { Title: req.title, Creator: 'TCA Blackjack · document-service' },
     });
 
     doc.on('data', chunk => chunks.push(chunk));

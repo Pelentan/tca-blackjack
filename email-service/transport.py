@@ -9,7 +9,7 @@ Configuration (environment variables):
   SMTP_PORT      — SMTP port (default: 1025 for MailHog, 587 for real SMTP)
   SMTP_USER      — Username for SMTP auth (optional, leave empty for MailHog)
   SMTP_PASSWORD  — Password for SMTP auth (optional, leave empty for MailHog)
-  SMTP_FROM      — From address (default: noreply@swarm-blackjack.local)
+  SMTP_FROM      — From address (default: noreply@tca-blackjack.local)
   SMTP_USE_TLS   — Use STARTTLS (default: false, set true for real SMTP)
 
 For dev: SMTP_HOST=mailhog SMTP_PORT=1025, no auth, MailHog catches everything.
@@ -31,7 +31,7 @@ SMTP_HOST    = os.environ.get('SMTP_HOST', 'mailhog')
 SMTP_PORT    = int(os.environ.get('SMTP_PORT', '1025'))
 SMTP_USER    = os.environ.get('SMTP_USER', '')
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
-SMTP_FROM    = os.environ.get('SMTP_FROM', 'noreply@swarm-blackjack.local')
+SMTP_FROM    = os.environ.get('SMTP_FROM', 'noreply@tca-blackjack.local')
 SMTP_USE_TLS = os.environ.get('SMTP_USE_TLS', 'false').lower() == 'true'
 
 
@@ -61,8 +61,8 @@ def _build_mime(msg: TransportMessage) -> MIMEMultipart:
     mime['To']      = msg.to_address
     mime['Message-ID']  = f"<{msg.message_id}@{SMTP_FROM.split('@')[-1]}>"
     mime['X-Message-ID']    = msg.message_id
-    mime['X-Swarm-Tier']    = msg.tier
-    mime['X-Swarm-Encrypted'] = str(msg.encrypted)
+    mime['X-TCA-Tier']    = msg.tier
+    mime['X-TCA-Encrypted'] = str(msg.encrypted)
 
     mime.attach(MIMEText(msg.body_text, 'plain', 'utf-8'))
     if msg.body_html:

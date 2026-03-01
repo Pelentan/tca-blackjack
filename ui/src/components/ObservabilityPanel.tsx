@@ -126,7 +126,7 @@ export const ObservabilityPanel: React.FC<{ compact?: boolean }> = ({ compact })
           boxShadow: connected ? '0 0 6px #38a169' : undefined,
         }} />
         <span style={{ color: '#8b949e', fontSize: '0.7rem', letterSpacing: 2, textTransform: 'uppercase', flex: 1 }}>
-          Swarm Activity — {events.length} events
+          TCA Activity — {events.length} events
         </span>
         <span style={{ color: '#4a5568', fontSize: '0.7rem' }}>{expanded ? '▼' : '▶'}</span>
       </div>
@@ -164,7 +164,7 @@ export const ObservabilityPanel: React.FC<{ compact?: boolean }> = ({ compact })
           }}>
             {events.length === 0 ? (
               <div style={{ color: '#4a5568', textAlign: 'center', padding: '20px 0', fontSize: '0.75rem' }}>
-                Waiting for swarm activity...
+                Waiting for TCA activity...
               </div>
             ) : (
               events.map(evt => <EventRow key={evt.id} evt={evt} />)

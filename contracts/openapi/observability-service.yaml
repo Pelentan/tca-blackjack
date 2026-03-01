@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Swarm Blackjack - Observability Service
+  title: TCA Blackjack - Observability Service
   description: |
     Receives inter-service call reports, filters sensitive data, and publishes
     to Redis pub/sub. The gateway subscribes to Redis and fans events out to
@@ -19,9 +19,9 @@ info:
     - Scratch container: static Go binary, no shell, no attack surface.
 
     Event flow:
-      [any service] → POST /event → [observability-service] → Redis swarm:events → [gateway] → SSE → [browser]
+      [any service] → POST /event → [observability-service] → Redis tca:events → [gateway] → SSE → [browser]
 
-    Internal service — mTLS only. Reachable by all services on swarm-net.
+    Internal service — mTLS only. Reachable by all services on tca-net.
   version: 0.1.0
 
 servers:
@@ -121,7 +121,7 @@ components:
 
     PublishedEvent:
       type: object
-      description: Shape published to Redis swarm:events channel and consumed by gateway SSE handler.
+      description: Shape published to Redis tca:events channel and consumed by gateway SSE handler.
       properties:
         id:
           type: string

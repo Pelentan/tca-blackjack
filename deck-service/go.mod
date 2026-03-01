@@ -1,3 +1,3 @@
-module github.com/swarm-blackjack/deck-service
+module github.com/tca-blackjack/deck-service
 
 go 1.22

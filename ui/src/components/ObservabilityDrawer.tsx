@@ -55,7 +55,7 @@ export const ObservabilityDrawer: React.FC = () => {
               fontSize: '0.65rem', color: '#8b949e',
               letterSpacing: 2, textTransform: 'uppercase',
             }}>
-              Swarm Activity
+              TCA Activity
             </span>
             {/* Legend inline in header */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -69,7 +69,7 @@ export const ObservabilityDrawer: React.FC = () => {
             </div>
           </div>
           <span style={{ color: '#4a5568', fontSize: '0.7rem' }}>
-            {open ? '▼ close' : '▲ swarm activity'}
+            {open ? '▼ close' : '▲ TCA activity'}
           </span>
         </div>
 
