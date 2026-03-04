@@ -37,6 +37,34 @@ x-tca-security:
     healthcheck probes) should be excluded from healthcheck configuration
     rather than relaxing this requirement.
 
+
+x-tca-observability:
+  report-outbound-calls: true
+  endpoint: https://observability-service:3009/event
+  pattern: fire-and-forget
+  caller-name: "deck-service"
+  required-fields:
+    - caller       # this service's name — must match observability-service allowlist
+    - callee       # name of the service being called
+    - method       # HTTP method: GET POST PUT DELETE PATCH
+    - path         # request path — will be sanitized by observability-service
+    - status_code  # HTTP response status received
+    - latency_ms   # round-trip time in milliseconds
+    - protocol     # http | https | mtls | sse | websocket
+  implementation:
+    timing: wrap-every-outbound-http-call
+    non-blocking: true   # fire-and-forget — do not await response
+    on-failure: log-and-drop  # if observability-service unreachable, log locally and continue
+    do-not-instrument: # never report calls TO observability-service — would cause a loop
+      - observability-service
+  notes: >
+    Every outbound HTTP call this service makes must be reported to
+    observability-service. This is a contract obligation, not optional
+    instrumentation. The report must be non-blocking — observability is
+    never on the critical path. If observability-service is unavailable,
+    log the failure locally and continue normally. Do not retry.
+    Do not report calls made to observability-service itself.
+
 servers:
   - url: https://deck-service:3002
     description: Internal Docker network
