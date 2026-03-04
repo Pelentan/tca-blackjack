@@ -9,6 +9,25 @@ info:
   contact:
     name: TCA Blackjack PoC
 
+
+x-tca-security:
+  external-transport: tls
+  internal-transport: mtls
+  notes: >
+    External (browser-facing): standard TLS. Browsers do not present client
+    certificates. JWT scope enforcement at the routing layer substitutes for
+    mTLS on the external boundary.
+    Internal (service-to-service): gateway acts as mTLS client when calling
+    all upstream services. Must load its own certificate and key and present
+    them on every upstream connection. Must verify upstream service certificates
+    against the TCA CA. Upstream services will reject connections without a
+    valid client certificate.
+  internal-client:
+    load-ca-cert: /certs/ca.crt
+    load-service-cert: /certs/gateway.crt
+    load-service-key: /certs/gateway.key
+    verify-server-cert: true
+
 servers:
   - url: http://localhost:8080
     description: Local development

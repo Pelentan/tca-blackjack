@@ -29,8 +29,36 @@ info:
     Internal service — not externally exposed. No mTLS yet (TODO).
   version: 0.1.0
 
+
+x-tca-security:
+  transport: mtls
+  tls-min-version: "1.2"
+  client-cert-required: true
+  reject-without-client-cert: true
+  ca-cert: /certs/ca.crt
+  service-cert: /certs/document-service.crt
+  service-key: /certs/document-service.key
+  implementation:
+    server:
+      load-ca-cert: true
+      load-service-cert: true
+      load-service-key: true
+      require-and-verify-client-cert: true
+    client:
+      load-ca-cert: true
+      load-service-cert: true
+      load-service-key: true
+      verify-server-cert: true
+  notes: >
+    Every inbound connection must present a certificate signed by the TCA CA.
+    Connections without a valid client certificate must be rejected — not
+    downgraded to unauthenticated. This applies to all endpoints including
+    /health. Services that cannot present client certificates (e.g. Docker
+    healthcheck probes) should be excluded from healthcheck configuration
+    rather than relaxing this requirement.
+
 servers:
-  - url: http://document-service:3011
+  - url: https://document-service:3011
     description: Internal Docker network
 
 paths:
