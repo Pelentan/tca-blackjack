@@ -12,7 +12,6 @@
 
   .arch { display: grid; gap: 16px; }
 
-  /* Layers */
   .layer { border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; }
   .layer-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; color: #8b949e; margin-bottom: 10px; }
 
@@ -23,7 +22,7 @@
     padding: 10px 14px;
     font-size: 0.78rem;
     flex: 1;
-    min-width: 130px;
+    min-width: 140px;
     position: relative;
   }
   .svc-name { font-weight: 600; margin-bottom: 3px; }
@@ -40,26 +39,25 @@
     letter-spacing: 0.5px;
   }
 
-  /* Color themes per service */
   .go    { background: #0d2137; border: 1px solid #1f6feb; }
   .ts    { background: #0d1f2d; border: 1px solid #0ea5e9; }
   .py    { background: #1a1f0d; border: 1px solid #84cc16; }
-  .java  { background: #1f0d0d; border: 1px solid #ef4444; }
+  .cobol { background: #1f1a0d; border: 1px solid #f59e0b; }
   .hs    { background: #1a0d2e; border: 1px solid #a855f7; }
   .ex    { background: #1a0d1a; border: 1px solid #e879f9; }
   .pg    { background: #0d1a2e; border: 1px solid #0284c7; }
   .redis { background: #1f0d0d; border: 1px solid #dc2626; }
   .infra { background: #0d1a0d; border: 1px solid #16a34a; }
+  .smtp  { background: #1a1a0d; border: 1px solid #ca8a04; }
 
   .tag-go    { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb; }
   .tag-ts    { background: #0ea5e933; color: #38bdf8; border: 1px solid #0ea5e9; }
   .tag-py    { background: #84cc1633; color: #a3e635; border: 1px solid #84cc16; }
-  .tag-java  { background: #ef444433; color: #fca5a5; border: 1px solid #ef4444; }
+  .tag-cobol { background: #f59e0b33; color: #fcd34d; border: 1px solid #f59e0b; }
   .tag-hs    { background: #a855f733; color: #d8b4fe; border: 1px solid #a855f7; }
   .tag-ex    { background: #e879f933; color: #f0abfc; border: 1px solid #e879f9; }
-  .tag-stub  { background: #37415133; color: #9ca3af; border: 1px solid #6b7280; }
+  .tag-infra { background: #16a34a33; color: #86efac; border: 1px solid #16a34a; }
 
-  /* Auth boundary */
   .boundary {
     border: 1px dashed #f59e0b;
     border-radius: 8px;
@@ -79,14 +77,20 @@
     text-transform: uppercase;
   }
 
-  /* Trust lines */
-  .trust-row { display: flex; gap: 10px; align-items: stretch; margin-top: 8px; }
-  .trust-box {
-    flex: 1;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 0.7rem;
+  .net-badge {
+    display: inline-block;
+    font-size: 0.55rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-top: 4px;
+    background: #0d1a1a;
+    border: 1px solid #0e7490;
+    color: #67e8f9;
+    letter-spacing: 0.5px;
   }
+
+  .trust-row { display: flex; gap: 10px; align-items: stretch; margin-top: 8px; }
+  .trust-box { flex: 1; border-radius: 6px; padding: 8px 12px; font-size: 0.7rem; }
   .trust-user { background: #1f1a0d; border: 1px solid #f59e0b; }
   .trust-svc  { background: #0d1a1a; border: 1px solid #06b6d4; }
   .trust-title { font-weight: 600; margin-bottom: 3px; font-size: 0.68rem; }
@@ -94,47 +98,48 @@
   .trust-svc  .trust-title { color: #06b6d4; }
   .trust-body { opacity: 0.7; line-height: 1.4; font-size: 0.66rem; }
 
-  hr { border: none; border-top: 1px solid #21262d; margin: 4px 0; }
-
   .arrow { text-align: center; color: #6e7681; font-size: 1.1rem; margin: 2px 0; }
 
   .db-row { display: flex; gap: 10px; flex-wrap: wrap; }
-  .db-box { flex: 1; min-width: 180px; border-radius: 6px; padding: 10px 14px; font-size: 0.75rem; }
+  .db-box { flex: 1; min-width: 160px; border-radius: 6px; padding: 10px 14px; font-size: 0.75rem; }
   .db-name { font-weight: 600; margin-bottom: 2px; }
+  .db-owner { font-size: 0.6rem; color: #67e8f9; margin-bottom: 3px; }
   .db-note { font-size: 0.65rem; opacity: 0.6; }
 
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.65rem; color: #8b949e; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .section-note { font-size: 0.63rem; color: #6e7681; margin-top: 8px; font-style: italic; }
 </style>
 </head>
 <body>
 
 <h1>TCA Blackjack</h1>
-<div class="subtitle">Proof-of-Concept · Polyglot Microservices · Zero Trust Posture</div>
+<div class="subtitle">Proof-of-Concept · Polyglot Microservices · Zero Trust Posture · 12 Jobs · 6 Languages</div>
 
 <div class="arch">
 
   <!-- CLIENT TIER -->
   <div class="layer">
-    <div class="layer-label">Client Tier</div>
+    <div class="layer-label">Client Tier — Browser</div>
     <div class="services">
-      <div class="svc ts" style="max-width:220px;">
+      <div class="svc ts" style="max-width:240px;">
         <div class="svc-name">Game UI</div>
         <div class="svc-lang">React + TypeScript</div>
-        <div class="svc-desc">Browser-first. Component architecture portable to Electron desktop with zero changes to business logic.</div>
+        <div class="svc-desc">Browser-first. Blackjack gameplay, chip management, real-time state via SSE. Component architecture portable to Electron with zero business logic changes.</div>
         <span class="tag tag-ts">TypeScript</span>
       </div>
-      <div class="svc ts" style="max-width:220px;">
+      <div class="svc ts" style="max-width:240px;">
         <div class="svc-name">Observability Dashboard</div>
         <div class="svc-lang">React + TypeScript</div>
-        <div class="svc-desc">Live visualization of TCA activity. Shows which container handled each operation in real-time.</div>
+        <div class="svc-desc">Live drawer showing every inter-service call as it happens — caller, callee, latency, status. Powered by SSE stream from gateway subscribing to Redis tca:events pub/sub.</div>
         <span class="tag tag-ts">TypeScript</span>
       </div>
     </div>
   </div>
 
-  <div class="arrow">↕ HTTPS</div>
+  <div class="arrow">↕ HTTPS · JWT bearer on all authenticated routes</div>
 
   <!-- GATEWAY -->
   <div class="layer">
@@ -143,13 +148,38 @@
       <div class="svc go">
         <div class="svc-name">API Gateway</div>
         <div class="svc-lang">Go</div>
-        <div class="svc-desc">Single entry point. TLS termination, request routing, rate limiting. All user traffic enters here — nothing else is externally exposed.</div>
+        <div class="svc-desc">Single external entry point. TLS termination, JWT validation, request routing, rate limiting. Subscribes to Redis tca:events and fans out to SSE clients. Nothing else is externally exposed.</div>
         <span class="tag tag-go">Go</span>
+        <br><span class="net-badge">gateway-net</span> <span class="net-badge">redis-net</span>
       </div>
     </div>
   </div>
 
-  <div class="arrow">↕ mTLS (internal)</div>
+  <div class="arrow">↕ mTLS — all internal service-to-service traffic · Ephemeral CA · 12 certificates · reject-without-client-cert enforced</div>
+
+  <!-- AUTH DOMAIN -->
+  <div class="layer">
+    <div class="layer-label">Authentication Domain</div>
+    <div class="boundary">
+      <div class="boundary-label">Zero Trust Boundary · All user identity established here</div>
+      <div class="services">
+        <div class="svc go">
+          <div class="svc-name">Auth UI Service</div>
+          <div class="svc-lang">Go</div>
+          <div class="svc-desc">Browser-facing proxy for the WebAuthn ceremony. Handles registration and login flows. Exchanges short-lived bootstrap JWTs (scope: enroll, 5min TTL) for session JWTs. Browser never calls auth-service directly.</div>
+          <span class="tag tag-go">Go</span>
+          <br><span class="net-badge">auth-net</span> <span class="net-badge">gateway-net</span>
+        </div>
+        <div class="svc ts">
+          <div class="svc-name">Auth Service + OPA</div>
+          <div class="svc-lang">TypeScript · Open Policy Agent</div>
+          <div class="svc-desc">Passkeys (WebAuthn/SimpleWebAuthn v10) primary. Magic link for account creation only. Issues short-lived JWTs (15min) + Redis refresh tokens. Hosts OPA policy engine — every user action asks "is this allowed?" Isolated auth database.</div>
+          <span class="tag tag-ts">TypeScript</span>
+          <br><span class="net-badge">auth-net</span> <span class="net-badge">redis-net</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- GAME DOMAIN -->
   <div class="layer">
@@ -158,60 +188,57 @@
       <div class="svc go">
         <div class="svc-name">Game State</div>
         <div class="svc-lang">Go</div>
-        <div class="svc-desc">Orchestrates game flow. State machine for round lifecycle. Coordinates all game-domain services.</div>
+        <div class="svc-desc">Orchestrates game flow. State machine for round lifecycle. Coordinates deck, hand evaluator, and dealer AI. Pushes state snapshots via SSE. Persists to game DB.</div>
         <span class="tag tag-go">Go</span>
+        <br><span class="net-badge">game-net</span> <span class="net-badge">data-net</span>
       </div>
       <div class="svc go">
         <div class="svc-name">Deck Service</div>
         <div class="svc-lang">Go</div>
-        <div class="svc-desc">Owns the shoe. Shuffle, cut, deal. Stateful per-table. Speed matters at scale.</div>
+        <div class="svc-desc">Owns the shoe. Shuffle, cut, deal. Stateful per-table. Automatic reshuffle at configurable penetration threshold. Speed matters at scale.</div>
         <span class="tag tag-go">Go</span>
+        <br><span class="net-badge">game-net</span>
       </div>
       <div class="svc hs">
         <div class="svc-name">Hand Evaluator</div>
         <div class="svc-lang">Haskell</div>
-        <div class="svc-desc">Pure function. Cards in → value out. Soft/hard totals, bust detection, blackjack. Immutable, deterministic, provably correct.</div>
+        <div class="svc-desc">Pure function. Cards in → value out. Soft/hard totals, bust detection, blackjack. Immutable, deterministic, provably correct. No state, no side effects. No JWT — mTLS is sufficient.</div>
         <span class="tag tag-hs">Haskell</span>
+        <br><span class="net-badge">game-net</span>
       </div>
       <div class="svc py">
         <div class="svc-name">Dealer AI</div>
         <div class="svc-lang">Python</div>
-        <div class="svc-desc">Rule-based strategy engine now. Architecture leaves ML upgrade path open with zero service contract changes.</div>
+        <div class="svc-desc">Rule-based strategy engine now. Architecture leaves ML upgrade path open with zero service contract changes — swap the implementation, not the interface.</div>
         <span class="tag tag-py">Python</span>
+        <br><span class="net-badge">game-net</span>
       </div>
     </div>
   </div>
 
-  <!-- SECURITY/FINANCIAL DOMAIN -->
+  <!-- FINANCIAL DOMAIN -->
   <div class="layer">
-    <div class="layer-label">Security &amp; Financial Domain</div>
-
+    <div class="layer-label">Financial Domain</div>
     <div class="boundary">
-      <div class="boundary-label">Zero Trust Boundary · All user requests verified here</div>
+      <div class="boundary-label">Isolated financial boundary · Separate DB · Re-validates every transaction</div>
       <div class="services">
-        <div class="svc ts">
-          <div class="svc-name">Auth Service + OPA</div>
-          <div class="svc-lang">TypeScript · Open Policy Agent</div>
-          <div class="svc-desc">Passkeys primary. TOTP fallback. Magic link for account creation only. Issues short-lived JWTs. Hosts policy engine — every user action asks "is this allowed?"</div>
-          <span class="tag tag-ts">TypeScript</span>
-        </div>
-        <div class="svc java">
+        <div class="svc cobol">
           <div class="svc-name">Bank Service</div>
-          <div class="svc-lang">Java</div>
-          <div class="svc-desc">Player finances. Fixed-point arithmetic in GnuCOBOL — no floats near money. Go provides the REST API and PostgreSQL layer. Completely isolated database. Re-validates Redis session on every financial operation regardless of JWT.</div>
-          <span class="tag tag-java">COBOL + Go</span>
+          <div class="svc-lang">GnuCOBOL + Go</div>
+          <div class="svc-desc">Player finances. Fixed-point arithmetic in COBOL — no floats near money, ever. Go provides REST API and PostgreSQL layer. Isolated database — no other service has credentials. Re-validates Redis session on every financial operation regardless of JWT. In production, this DB would be an external managed service.</div>
+          <span class="tag tag-cobol">COBOL + Go</span>
+          <br><span class="net-badge">financial-net</span> <span class="net-badge">redis-net</span>
         </div>
       </div>
     </div>
-
     <div class="trust-row">
       <div class="trust-box trust-user">
         <div class="trust-title">User → Service (Trust Boundary)</div>
-        <div class="trust-body">Auth/OPA policy check on every request. JWT (15min) + Redis refresh token. Bank operations additionally re-validate session directly.</div>
+        <div class="trust-body">JWT validated at gateway. OPA policy check per request. Bank operations additionally re-validate Redis session directly — JWT alone is not sufficient for financial operations.</div>
       </div>
       <div class="trust-box trust-svc">
         <div class="trust-title">Service → Service (Internal)</div>
-        <div class="trust-body">Mutual TLS on isolated Docker network. Verified identity, encrypted transit. No policy overhead — "shake hands without gloves."</div>
+        <div class="trust-body">Mutual TLS on isolated per-domain bridge networks. Both sides present CA-signed certificates. Connections without a valid client certificate are rejected — not downgraded to unauthenticated.</div>
       </div>
     </div>
   </div>
@@ -223,46 +250,97 @@
       <div class="svc ex">
         <div class="svc-name">Chat Service</div>
         <div class="svc-lang">Elixir · OTP</div>
-        <div class="svc-desc">E2E encrypted. Public table chat + targeted private messages. OTP supervision trees — a crashed process restarts in isolation, never takes down the game. Built for this exact problem (see: WhatsApp).</div>
+        <div class="svc-desc">E2E encrypted. Public table chat + targeted private messages. OTP supervision trees — a crashed process restarts in isolation, never takes down the game. Designed for exactly this problem (see: WhatsApp).</div>
         <span class="tag tag-ex">Elixir</span>
+        <br><span class="net-badge">chat-net</span>
       </div>
       <div class="svc py">
         <div class="svc-name">Email Service</div>
         <div class="svc-lang">Python</div>
-        <div class="svc-desc">Account verification and magic links. Real SMTP delivery via containerized Postfix — Gmail relay for local dev, direct MX for production infrastructure. Swap transport with zero upstream changes.</div>
+        <div class="svc-desc">Account verification and magic links. Tiered security model: system, social, personal, confidential, restricted. Auth/OPA check on every send. Real SMTP via Postfix. Swap transport with zero upstream changes.</div>
         <span class="tag tag-py">Python</span>
+        <br><span class="net-badge">mail-net</span>
+      </div>
+      <div class="svc smtp">
+        <div class="svc-name">Postfix</div>
+        <div class="svc-lang">SMTP Relay · Infrastructure</div>
+        <div class="svc-desc">Containerized MTA. Gmail relay for local dev, direct MX for production. Email Service is the only Job with access to mail-net. Not a TCA Job — third-party infrastructure. No TCA certificate.</div>
+        <span class="tag tag-infra">Infrastructure</span>
+        <br><span class="net-badge">mail-net</span>
       </div>
     </div>
   </div>
 
+  <!-- PLATFORM DOMAIN -->
+  <div class="layer">
+    <div class="layer-label">Platform Domain</div>
+    <div class="services">
+      <div class="svc go">
+        <div class="svc-name">Observability Service</div>
+        <div class="svc-lang">Go · Scratch Container</div>
+        <div class="svc-desc">Receives inter-service event reports from all Jobs (contract obligation: x-tca-observability). Sanitizes (strips UUIDs, JWTs, IPs). Enforces caller allowlist — unknown callers dropped silently. Publishes clean events to Redis tca:events. Fire-and-forget — never on the critical path.</div>
+        <span class="tag tag-go">Go</span>
+        <br><span class="net-badge">redis-net</span> <span class="net-badge">observability-net</span>
+      </div>
+      <div class="svc ts">
+        <div class="svc-name">Document Service</div>
+        <div class="svc-lang">TypeScript · PDFKit</div>
+        <div class="svc-desc">Layout engine, not document factory. Accepts structured block data (text, tables, footers) and returns PDF binary. No domain knowledge — any Job can use it for any document type. Stateless: request in, PDF out.</div>
+        <span class="tag tag-ts">TypeScript</span>
+        <br><span class="net-badge">game-net</span>
+      </div>
+    </div>
+    <div class="section-note">All 11 other Jobs report outbound calls to Observability Service per x-tca-observability contract obligation. Observability Service itself does not report — it would cause a loop.</div>
+  </div>
+
   <!-- DATA TIER -->
   <div class="layer">
-    <div class="layer-label">Data Tier</div>
+    <div class="layer-label">Data Tier — Network Isolated Per Domain</div>
     <div class="db-row">
       <div class="db-box pg">
-        <div class="db-name">🗄 Game History DB</div>
+        <div class="db-name">🗄 Game DB</div>
         <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">PostgreSQL</div>
-        <div class="db-note">All game state, hand history, session data. Accessible to Game domain services.</div>
+        <div class="db-owner">Owner: game-state</div>
+        <div class="db-note">Game state, hand history, session data. Game domain services only. On data-net.</div>
       </div>
       <div class="db-box pg">
         <div class="db-name">🗄 Bank DB</div>
         <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">PostgreSQL · Isolated</div>
-        <div class="db-note">Player finances only. Completely separate instance. Bank Service is the only service with credentials.</div>
+        <div class="db-owner">Owner: bank-service only</div>
+        <div class="db-note">Player finances. Completely separate instance. No other service has credentials. On financial-net. External managed service in production.</div>
+      </div>
+      <div class="db-box pg">
+        <div class="db-name">🗄 Auth DB</div>
+        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">PostgreSQL · Isolated</div>
+        <div class="db-owner">Owner: auth-service only</div>
+        <div class="db-note">Passkey credentials, WebAuthn challenges, verified player accounts. Auth-service is the only service with credentials. On auth-net.</div>
       </div>
       <div class="db-box redis">
-        <div class="db-name">⚡ Session Store</div>
-        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">Redis</div>
-        <div class="db-note">Refresh tokens, fast auth validation, rate limiting state. Instant revocation — "sign out everywhere" works.</div>
+        <div class="db-name">⚡ Redis</div>
+        <div class="svc-lang" style="font-size:0.65rem;opacity:0.7;margin:2px 0;">Session Store · Pub/Sub</div>
+        <div class="db-owner">auth-service · bank-service · gateway · observability-service</div>
+        <div class="db-note">Refresh tokens, fast auth validation, rate limiting. tca:events and tca:balance pub/sub channels. Instant revocation. On redis-net.</div>
       </div>
     </div>
+    <div class="section-note">Database connections protected by network isolation (PoC). Production: TLS required — or external managed services with their own security controls. Not a TCA architecture concern.</div>
   </div>
 
   <!-- INFRA -->
   <div class="layer infra">
     <div class="layer-label">Infrastructure</div>
-    <div style="font-size:0.72rem;opacity:0.8;line-height:1.8;">
-      <strong>Now:</strong> Docker Compose · Single host · mTLS via ephemeral PKI (cert-init generates CA + per-service certs at startup) · Per-domain network isolation (9 bridge networks) · Real email via Postfix<br>
-      <strong>K8s-ready:</strong> Each service is a deployable unit · OPA as sidecar policy engine · Horizontal scaling by service · Network policies map 1:1 from Compose
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:0.68rem;font-weight:600;color:#86efac;margin-bottom:6px;">cert-init (Init Container)</div>
+        <div style="font-size:0.68rem;opacity:0.75;line-height:1.7;">Alpine + openssl · Runs once at startup · Generates ephemeral CA + 12 per-service certificates into shared Docker volume · Exits cleanly (restart: "no") · All 12 Jobs depend_on cert-init completing before starting · Volume destroyed on docker compose down · Production: replace with cert-manager or organizational CA</div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:0.68rem;font-weight:600;color:#86efac;margin-bottom:6px;">Network Isolation (9 Bridge Networks)</div>
+        <div style="font-size:0.68rem;opacity:0.75;line-height:1.7;">gateway-net · game-net · financial-net · auth-net · chat-net · mail-net · redis-net · data-net · observability-net · Each Job attached only to networks it has legitimate reason to reach · Databases unreachable except by their owning service · Maps 1:1 to K8s network policies</div>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:0.68rem;font-weight:600;color:#86efac;margin-bottom:6px;">K8s-Ready</div>
+        <div style="font-size:0.68rem;opacity:0.75;line-height:1.7;">Each Job is an independently deployable unit · OPA as sidecar policy engine · Horizontal scaling per service · Pod Affinity for latency-sensitive game domain · cert-init replaced by cert-manager · Network policies map directly from Compose isolation model</div>
+      </div>
     </div>
   </div>
 
@@ -270,12 +348,12 @@
   <div class="layer">
     <div class="layer-label">Language Rationale</div>
     <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb;"></div> Go — throughput, concurrency, HTTP</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#a855f7;"></div> Haskell — pure functions, provable correctness</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9;"></div> TypeScript — auth ecosystem, type safety</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#84cc16;"></div> Python — ML upgrade path, fast iteration</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> COBOL + Go — financial arithmetic in COBOL, REST API in Go</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#e879f9;"></div> Elixir — concurrent messaging, fault isolation</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1f6feb;"></div> Go — throughput, concurrency, HTTP (Gateway, Game State, Deck Service, Auth UI, Observability Service)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a855f7;"></div> Haskell — pure functions, provable correctness (Hand Evaluator)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9;"></div> TypeScript — auth ecosystem, type safety, PDF (Auth Service + OPA, Document Service)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#84cc16;"></div> Python — ML upgrade path, fast iteration (Dealer AI, Email Service)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> COBOL + Go — proven financial arithmetic in COBOL, modern REST API in Go (Bank Service)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e879f9;"></div> Elixir — concurrent messaging, fault isolation, OTP supervision (Chat Service)</div>
     </div>
   </div>
 
